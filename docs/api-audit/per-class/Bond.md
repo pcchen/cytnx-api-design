@@ -9,7 +9,7 @@ one C++-only member (`getUniqueQnums`) that has no Python binding at all.
 
 Ground truth for behavior is `docs/api-audit/probes/Bond.py`, executed
 against `./.venv/bin/python` (`source tools/env.sh && $PY
-docs/api-audit/probes/Bond.py`; all 27 assertions `[PASS]`, exit 0). Ground
+docs/api-audit/probes/Bond.py`; all 31 assertions `[PASS]`, exit 0). Ground
 truth for static signatures is `cytnx_src/include/Bond.hpp` (C++
 declarations), `cytnx_src/pybind/bond_py.cpp` (the actual pybind11 binding —
 authoritative for the Python-visible call signature and for *which* C++
@@ -82,11 +82,13 @@ Every claim below is backed by a passing `report(...)` assertion in
   view); pybind converts the returned STL container by value (via
   `pybind11/stl.h`), so the Python object handed back is always an
   independent list. Probed directly with `returns_view()`: *"Bond.qnums()
-  returns a copy in Python, not the C++-side mutable-reference view"* and
+  returns a copy in Python, not the C++-side mutable-reference view"*,
   *"Bond.getDegeneracies() returns a copy in Python (same B2 pattern as
-  qnums())"* — both `[PASS]` with `is_view is False`. This is a genuine B2
-  divergence: a C++ caller holding `bond.qnums()` can mutate the bond's
-  quantum numbers through that reference; a Python caller cannot.
+  qnums())"*, and *"Bond.syms() returns a copy in Python (same B2 pattern as
+  qnums()/getDegeneracies())"* — all three `[PASS]` with `is_view is False`.
+  This is a genuine B2 divergence: a C++ caller holding `bond.qnums()` can
+  mutate the bond's quantum numbers through that reference; a Python caller
+  cannot.
 - **P3 — `qnums_clone()`/`syms_clone()` are redundant with `qnums()`/`syms()`
   in Python**, a direct consequence of P2: since the Python bindings of
   `qnums()`/`syms()` are already always-copy, there is no remaining
@@ -160,9 +162,12 @@ Every claim below is backed by a passing `report(...)` assertion in
   `__mul__`/`__imul__` in Python.** `Bond.hpp` defines `operator*` (== the
   named `combineBond`) and `operator*=` (== the named `combineBond_`)
   specifically so `bd1 * bd2` / `bd1 *= bd2` work in C++; `bond_py.cpp`
-  binds neither. Probed: `b1 * b2` and `b1 *= b2` both raise `TypeError:
-  unsupported operand type(s)` — *"Bond has no __mul__ in Python..."* /
-  *"...no __imul__ in Python..."*, both `[PASS]`. This is a direct B5
+  binds neither. Probed by actually invoking the operators and catching the
+  exception: *"b1 * b2 raises TypeError (operator* not bound in Python)"*
+  and *"b1 *= b2 raises TypeError (operator*= not bound in Python)"*, both
+  `[PASS]` (in addition to the weaker `hasattr(__mul__)`/`hasattr(__imul__)`
+  checks — *"Bond has no __mul__ in Python..."* / *"...no __imul__ in
+  Python..."*, also `[PASS]`). This is a direct B5
   violation (the operator form should be equivalent to the named-method
   form; here it doesn't exist at all). By contrast, `operator!=` is not
   explicitly bound either, but works correctly via Python's default
@@ -204,12 +209,17 @@ Every claim below is backed by a passing `report(...)` assertion in
   under its proper name (see Recommendation table; `c_getDegeneracy_refarg`
   is kept for now only because it is presently the *sole working* path to a
   degeneracy lookup, P6).
-- **C6 — violates N4/N5 adjacent: the accessor `type()` doesn't match the
-  constructor parameter name it reads back (`bond_type`).** The constructor
-  and `Init` both take a `bond_type` keyword argument (`bond_py.cpp:33-78`),
-  but the getter for that same value is named `type()` — a different word,
-  and one that shadows the Python builtin `type` when called as a free
-  identifier. Recommend renaming the getter to `bond_type()` to match.
+- **C6 — the accessor `type()` doesn't match the constructor parameter name
+  it reads back (`bond_type`).** No `N`/`B` convention in
+  `00-methodology.md` speaks directly to getter-vs-constructor-parameter
+  naming (N4 governs parameter names across sibling *methods*, not a
+  no-argument getter's own name against a constructor keyword), so this is
+  flagged as a plain internal-naming inconsistency rather than a cited
+  violation: the constructor and `Init` both take a `bond_type` keyword
+  argument (`bond_py.cpp:33-78`), but the getter for that same value is
+  named `type()` — a different word, and one that shadows the Python
+  builtin `type` when called as a free identifier. Recommend renaming the
+  getter to `bond_type()` to match.
 - **C7 — minor: `combineBond_`'s in-place return value (`None`) is
   inconsistent with `redirect_`'s and `set_type`'s in-place return value
   (`self`).** `00-methodology.md` B1 explicitly permits either ("callers
@@ -736,8 +746,9 @@ Return this bond's Symmetry objects.
 Returns
 -------
 list of Symmetry
-    A fresh Python list (confirmed by probe pattern, same as qnums() —
-    Parity finding P2). Mutating the returned list never affects this bond.
+    A fresh Python list (confirmed by probe: syms() returns a copy, not the
+    C++-side mutable-reference view — Parity finding P2). Mutating the
+    returned list never affects this bond.
 ```
 
 ### `syms_clone`
@@ -837,8 +848,11 @@ Clean-slate migration map: `current (C++ name / Python name) → recommended`.
 | *(none — not bound)* `operator*` / `operator*=` | `__mul__` / `__imul__` (new Python bindings) | P8/B5 |
 | `c_getDegeneracy_refarg` | *(removed once `get_degeneracy` fix ships and is re-verified)* | interim-only internal plumbing (C5/P6) |
 
-All members not listed in this table (`calc_reverse_qnums`* aside — listed
-above for its rename — `clone`, `combine_bond`/`combine_bond_` post-rename,
-`dim`, `get_fermion_parity`, `group_duplicates`, `has_duplicate_qnums`,
-`qnums`, `qnums_clone`, `redirect`, `redirect_`, `retype`, `syms`,
-`syms_clone`) keep both their current name and current behavior.
+Every other public member of `Bond` — `clone`, `dim`, `get_fermion_parity`,
+`group_duplicates`, `has_duplicate_qnums`, `qnums`, `qnums_clone`,
+`redirect`, `redirect_`, `retype`, `syms`, `syms_clone` — has no row above
+and keeps both its current name and current behavior unchanged.
+(`calc_reverse_qnums` and `combineBond`/`combineBond_` *are* renamed — to
+`reverse_qnums` and `combine_bond`/`combine_bond_` respectively — see their
+rows above; they are intentionally excluded from this "unchanged" list, not
+"not listed in this table.")

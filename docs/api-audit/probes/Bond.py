@@ -85,11 +85,12 @@ is_view = returns_view(
 report("clone() produces an independent Bond (mutating the clone leaves the source untouched)",
        is_view is False)
 
-# --- qnums()/getDegeneracies(): Python always returns a copy [B2] ------
-# C++ has a non-const `qnums()`/`getDegeneracies()` overload that returns a
-# mutable reference (a view onto the Bond's internal state); pybind binds
-# both call sites through STL-container-by-value conversion, so the Python
-# object handed back is always an independent list.
+# --- qnums()/getDegeneracies()/syms(): Python always returns a copy [B2] ------
+# C++ has a non-const `qnums()`/`getDegeneracies()`/`syms()` overload that
+# returns a mutable reference (a view onto the Bond's internal state);
+# pybind binds all three call sites through STL-container-by-value
+# conversion, so the Python object handed back is always an independent
+# list.
 
 is_view_qnums = returns_view(
     make=lambda: u1_bond([(0, 2), (1, 3)]),
@@ -108,6 +109,15 @@ is_view_degs = returns_view(
 )
 report("Bond.getDegeneracies() returns a copy in Python (same B2 pattern as qnums())",
        is_view_degs is False)
+
+is_view_syms = returns_view(
+    make=lambda: u1_bond([(0, 2), (1, 3)]),
+    derive=lambda src: src.syms(),
+    mutate=lambda h: h.__setitem__(0, cytnx.Symmetry.Zn(2)),
+    read=lambda src: src.syms(),
+)
+report("Bond.syms() returns a copy in Python (same B2 pattern as qnums()/getDegeneracies())",
+       is_view_syms is False)
 
 # --- set_type: mutates in place despite lacking a trailing `_` [N2] -----
 
@@ -201,6 +211,24 @@ report("Bond has no __mul__ in Python even though C++ defines operator* (== comb
        mul_missing)
 report("Bond has no __imul__ in Python even though C++ defines operator*= (== combineBond_)",
        imul_missing)
+
+mop1 = cytnx.Bond(2)
+mop2 = cytnx.Bond(3)
+try:
+    mop1 * mop2
+    mul_raised = False
+except TypeError:
+    mul_raised = True
+report("b1 * b2 raises TypeError (operator* not bound in Python)", mul_raised)
+
+mop3 = cytnx.Bond(2)
+mop4 = cytnx.Bond(3)
+try:
+    mop3 *= mop4
+    imul_raised = False
+except TypeError:
+    imul_raised = True
+report("b1 *= b2 raises TypeError (operator*= not bound in Python)", imul_raised)
 
 # --- operator!= : not explicitly bound, but works via Python's default ----
 # __ne__ delegation to __eq__ (C++ declares operator!= explicitly; Python
