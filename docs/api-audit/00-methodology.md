@@ -99,7 +99,7 @@ live public member is absent from the Recommendation table, or if any
   consistency finding against N4.
 - **N5 — boolean/flag parameters and predicate methods read as a
   yes/no question or a clearly named flag** (`is_contiguous()`,
-  `requires_grad`), not an abbreviated or ambiguous short name. Predicate
+  `is_blockform`), not an abbreviated or ambiguous short name. Predicate
   methods (returning `bool`) are prefixed `is_`/`has_` unless already a
   self-evident adjective.
 
