@@ -1,3 +1,5 @@
 cytnx_src/
 *.pyc
 __pycache__/
+.superpowers/
+.venv/
