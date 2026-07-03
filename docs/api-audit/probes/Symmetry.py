@@ -56,6 +56,17 @@ report("Zn(2) != Zn(3) (different n) but Zn(2) == Zn(2) (same stype/n)",
 report("FermionParity() != FermionNumber() (different stype, despite both fermionic)",
        (fp == fn) is False)
 
+report("__ne__ actually evaluates (not just __eq__): U1() != Zn(3) is True; "
+       "U1() != U1() (a fresh, value-equal instance) is False",
+       (u1 != z3) is True and (u1 != Symmetry.U1()) is False)
+
+# --- C5: n()'s per-subtype sentinel values --------------------------------
+
+report("FermionParity().n() == -2 and FermionNumber().n() == -1: internal "
+       "sentinel values (Symmetry_base's raw storage, reused as a type "
+       "discriminant), not a meaningful qnum-range size for these subtypes",
+       fp.n() == -2 and fn.n() == -1)
+
 # --- clone(): independent wrapper, equal by value ------------------------
 # Symmetry has no Python-reachable mutating method at all (see P3 below), so
 # clone()'s copy-vs-view distinction cannot be demonstrated by mutation the
@@ -241,5 +252,25 @@ report("Zn(3).check_qnums([0, 1, 4]) is False: batch check fails if ANY element 
        "is out of range", z3.check_qnums([0, 1, 4]) is False)
 report("Zn(3).check_qnums([0, 1, 2]) is True: all elements in range",
        z3.check_qnums([0, 1, 2]) is True)
+
+# --- BUG (new): FermionParitySymmetry::check_qnums compares against the -----
+# sentinel this->n (-2) instead of the literal bound 2
+# (cytnx_src/src/Symmetry.cpp:167-174, specifically line 170:
+# `qnums[i] < this->n`), so `qnums[i] < -2` is never true for any qnum >= 0
+# -- check_qnums therefore returns False for EVERY non-empty input on a
+# FermionParity symmetry, even qnums that are genuinely valid (0 and 1) and
+# that the *singular* check_qnum happily accepts. This is a real,
+# self-contradictory bug on the same object: check_qnum(0) is True but
+# check_qnums([0]) is False for the identical value.
+
+report("BUG: FermionParity.check_qnum(0) is True (0 is a valid parity qnum) "
+       "but FermionParity.check_qnums([0]) is False for the SAME value -- "
+       "check_qnums (Symmetry.cpp:170) wrongly compares against the sentinel "
+       "n() (-2) instead of the literal bound 2, so it rejects every "
+       "non-empty input regardless of validity",
+       fp.check_qnum(0) is True and fp.check_qnums([0]) is False)
+report("...same contradiction for qnum 1: check_qnum(1) is True, "
+       "check_qnums([1]) is False",
+       fp.check_qnum(1) is True and fp.check_qnums([1]) is False)
 
 print("Symmetry probe ok")

@@ -9,7 +9,7 @@ class (installed `cytnx==1.1.0` wheel).
 
 Ground truth for behavior is `docs/api-audit/probes/Symmetry.py`, executed
 against `./.venv/bin/python` (`source tools/env.sh && $PY
-docs/api-audit/probes/Symmetry.py`; all 36 assertions `[PASS]`, exit 0).
+docs/api-audit/probes/Symmetry.py`; all 40 assertions `[PASS]`, exit 0).
 Ground truth for static signatures is `cytnx_src/include/Symmetry.hpp` (C++
 declarations, on both the public `Symmetry` wrapper and its
 `Symmetry_base`/`U1Symmetry`/`ZnSymmetry`/`FermionParitySymmetry`/
@@ -39,7 +39,7 @@ are the effective pybind-visible signature, cross-checked against
 | `U1` (static) | `static Symmetry U1()` | `U1() -> Symmetry` (staticmethod) |
 | `Zn` (static) | `static Symmetry Zn(const int &n)` | `Zn(n: int) -> Symmetry` (staticmethod) |
 | `check_qnum` | `bool check_qnum(const cytnx_int64&)` *(dispatches to the active subtype's override; U1/FermionNumber: always `True`; Zn: `0<=qnum<n`; FermionParity: `0<=qnum<2`)* | `check_qnum(qnum: int) -> bool` |
-| `check_qnums` | `bool check_qnums(const vector<cytnx_int64>&)` *(all-elements-valid AND of `check_qnum`)* | `check_qnums(qnums: List[int]) -> bool` |
+| `check_qnums` | `bool check_qnums(const vector<cytnx_int64>&)` *(nominally the all-elements-valid AND of `check_qnum`; true for U1/Zn/FermionNumber, but **not** for FermionParity — see P7)* | `check_qnums(qnums: List[int]) -> bool` |
 | `clone` | `Symmetry clone() const` | `clone() -> Symmetry`; also bound as `__copy__`/`__deepcopy__` (bound twice at `symmetry_py.cpp:65,69`, harmlessly redundant) |
 | `combine_rule` | `vector<int64> combine_rule(const vector<int64>&, const vector<int64>&)` *(batch form, unbound — see P2)*; `int64 combine_rule(const int64&, const int64&, const bool& is_reverse=false) const` | Only the scalar form is bound, via a Python-only wrapper lambda: `combine_rule(qnL: int, qnR: int, is_reverse: bool=False) -> int` — the lambda runs `NormalizeZnInput` on `qnL`/`qnR` *before* calling the native C++ method (see P1); the batch/vector overload has **no Python binding at all** (P2) |
 | `get_fermion_parity` | `fermionParity get_fermion_parity(const cytnx_int64&) const` *(base: always `EVEN`; Zn: not overridden, inherits base; FermionParity: `0`→EVEN,`1`→ODD, else raises; FermionNumber: even/odd of the qnum itself)* | `get_fermion_parity(qnum: int) -> fermionParity` |
@@ -51,7 +51,7 @@ are the effective pybind-visible signature, cross-checked against
 | *(C++-only)* `combine_rule_`/`reverse_rule_` | `void combine_rule_(vector<int64>&, const vector<int64>&, const vector<int64>&)`; `void combine_rule_(int64&, const int64&, const int64&, const bool&)`; `void reverse_rule_(int64&, const int64&)` | **absent from Python** — no binding of any kind (see P3) |
 | *(C++-only)* `print_info` | `void print_info() const` (prints directly to `std::cout`) | **no direct Python binding**; only reachable as an undocumented side effect of the broken `__repr__`/`__str__` (see P5) |
 | *(C++-only)* 2-arg constructor | `Symmetry(const int &stype=-1, const int &n=0)` | **not exposed** — only `py::init<>()` (zero-arg) is registered (`symmetry_py.cpp:59-60`, the 2-arg overload is commented out); Python callers must use the static factories (see P4) |
-| *(C++-only)* `operator!=` | `bool operator!=(const Symmetry&) const` | not explicitly bound, but works via Python's default `__ne__`-delegates-to-`__eq__` behavior (same non-issue pattern noted in `Bond.md`'s P8) |
+| *(C++-only)* `operator!=` | `bool operator!=(const Symmetry&) const` | not explicitly bound, but works via Python's default `__ne__`-delegates-to-`__eq__` behavior (same non-issue pattern noted in `Bond.md`'s P8; probed directly: `U1() != Zn(3)` is `True`, `U1() != U1()` is `False`) |
 
 ## Parity findings
 
@@ -158,6 +158,40 @@ Every claim below is backed by a passing `report(...)` assertion in
   Probed: *"The Python-visible enum is named SymType (not SymmetryType...)"*
   `[PASS]` (`hasattr(cytnx, "SymType")` is `True`, `hasattr(cytnx,
   "SymmetryType")` is `False`).
+- **P7 — undocumented bug: `FermionParitySymmetry::check_qnums` compares
+  against the internal `n` sentinel (`-2`) instead of the literal bound `2`,
+  so it rejects every non-empty input, even genuinely valid ones — directly
+  contradicting the same object's own `check_qnum` (singular).**
+  `cytnx_src/src/Symmetry.cpp:167-174`:
+  ```cpp
+  bool cytnx::FermionParitySymmetry::check_qnums(const std::vector<cytnx_int64> &qnums) {
+    bool out = true;
+    for (cytnx_uint64 i = 0; i < qnums.size(); i++) {
+      out = ((qnums[i] >= 0) && (qnums[i] < this->n));   // line 170: should be `< 2`, not `< this->n`
+      if (out == false) break;
+    }
+    return out;
+  }
+  ```
+  For a `FermionParity` symmetry, `this->n` is the internal type-discriminant
+  sentinel `-2` (see Consistency finding C5), not the valid-range bound `2`
+  that the sibling `check_qnum(const cytnx_int64&)` correctly uses
+  (`Symmetry.cpp:163-165`: `qnum >= 0 && qnum < 2`). Since no `qnum >= 0` can
+  ever be `< -2`, `check_qnums` returns `False` for *every* non-empty input on
+  a `FermionParity` symmetry — including `[0]` and `[1]`, both of which
+  `check_qnum` itself accepts. This is present identically in C++ and Python
+  (no binding-layer wrapper touches this path), and it was missed by this
+  audit's first pass: the Inventory and the `is_valid_qnums` docstring
+  previously asserted `check_qnums` is simply "the AND of `check_qnum` over
+  every element," which is false for this subtype. Probed directly:
+  *"BUG: FermionParity.check_qnum(0) is True ... but
+  FermionParity.check_qnums([0]) is False for the SAME value"* and the same
+  for qnum `1` — both `[PASS]`. Empirically:
+  `cytnx.Symmetry.FermionParity().check_qnum(0)` is `True` while
+  `cytnx.Symmetry.FermionParity().check_qnums([0])` is `False` — a
+  self-contradiction on one object. Recommend fixing `Symmetry.cpp:170` to
+  compare against the literal `2` (matching `check_qnum`), the same way C6's
+  `reverse_rule_` fix is recommended for `FermionParitySymmetry`.
 
 ## Consistency findings
 
@@ -250,7 +284,7 @@ would share the same Python name).
 | `U1` | rename | → `u1` (C1/N1). Static factory. |
 | `Zn` | rename | → `zn` (C1/N1). Static factory. |
 | `check_qnum` | rename | → `is_valid_qnum` (C2/N5): boolean predicate needs an `is_`/`has_` prefix. |
-| `check_qnums` | rename | → `is_valid_qnums` (C2/N5), for the same reason. |
+| `check_qnums` | rename | → `is_valid_qnums` (C2/N5), for the same reason. **Also fix the underlying C++ bug** (P7): for FermionParity, `Symmetry.cpp:170` compares against the sentinel `n` (-2) instead of the literal bound `2`, so it wrongly rejects every non-empty input — the rename must not ship the bug under a new name. |
 | `clone` | keep | Correctly named; returns a distinct, value-equal object (confirmed by probe). De-duplicate the doubled `.def("clone", ...)` registration (`symmetry_py.cpp:65,69`) as a harmless internal cleanup. |
 | `combine_rule` | keep | Rename parameters `qnL`/`qnR` → `qnum_l`/`qnum_r` (C3/N4). **Must also gain the missing batch/list overload** (P2): `combine_rule(qnums_l: List[int], qnums_r: List[int]) -> List[int]`, binding the currently-unreachable C++ vector overload under the same name. |
 | `get_fermion_parity` | keep | Already `snake_case`, already uses the target parameter name `qnum` (the N4 model other methods should match, C3). |
@@ -426,13 +460,21 @@ qnums : list of int
 Returns
 -------
 bool
-    True iff `is_valid_qnum` would return True for every element
-    (confirmed by probe: an all-valid list returns True, a list with one
-    out-of-range element returns False).
+    For U1/Zn/FermionNumber: True iff `is_valid_qnum` would return True for
+    every element (confirmed by probe: an all-valid list returns True, a
+    list with one out-of-range element returns False). **For FermionParity,
+    this is NOT the case**: a source bug (`Symmetry.cpp:170` compares each
+    element against the internal `n` sentinel `-2` instead of the literal
+    bound `2`) makes this method return False for every non-empty list,
+    even lists of otherwise-valid qnums like `[0]` or `[1]` that
+    `is_valid_qnum` itself accepts (confirmed by probe: see Parity finding
+    P7). Fix the C++ bug before relying on this method for FermionParity.
 
 Notes
 -----
-Renamed from `check_qnums` (C2/N5).
+Renamed from `check_qnums` (C2/N5). See Parity finding P7 for a
+FermionParity-specific correctness bug in the underlying C++ that this
+rename alone does not fix.
 ```
 
 ### `clone`
