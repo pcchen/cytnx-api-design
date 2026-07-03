@@ -438,7 +438,7 @@ Expected: five `PASS` lines.
 - Produces: `UniTensor.md` — the central input to `linalg.md`, `Network.md`, and `essential-api.md`.
 
 - [ ] **Step 1: Inventory** — `$PY tools/member_inventory.py UniTensor > /tmp/UniTensor_inventory.txt`; expect ~126 members. Group them in the scratch file by the seven categories above.
-- [ ] **Step 2: Write `probes/UniTensor.py`** — cover the behavior-heavy claims: `Conj`/`Conj_`, `Dagger`/`Dagger_`, `permute`/`permute_`, `contiguous`/`contiguous_`, `reshape` copy-vs-view, `relabel`/`relabels`, `get_block`/`get_block_` (view vs copy), `set_elem`/indexing mutation, dtype/device conversion. Each uses `report(...)` and, for copy/view, `mutates_alias(make, mutate, read)`.
+- [ ] **Step 2: Write `probes/UniTensor.py`** — cover the behavior-heavy claims: `Conj`/`Conj_`, `Dagger`/`Dagger_`, `permute`/`permute_`, `contiguous`/`contiguous_`, `reshape` copy-vs-view, `relabel`/`relabels`, `get_block`/`get_block_` (view vs copy), `set_elem`/indexing mutation, dtype/device conversion. Each uses `report(...)` and, for copy/view, `returns_view(make, derive, mutate, read)` (from `probe_helper`; `derive` applies the method under test, and it returns True iff the source observes the mutation).
 - [ ] **Step 3: Run the probe** — `$PY docs/api-audit/probes/UniTensor.py`; expected all `[PASS]`. Correct any claim the runtime disproves.
 - [ ] **Step 4: Write `per-class/UniTensor.md`** — six-section template; Recommendation table organized by the seven sub-groups but covering **every** member; parity section highlights the capitalized-name (`N1`) and in-place-suffix (`N2`) conventions; docstrings for every keep/add/rename member with explicit copy/view notes (`B1`/`B2`).
 - [ ] **Step 5: Validate** — `$PY tools/validate_doc.py UniTensor docs/api-audit/per-class/UniTensor.md`; expected `PASS: UniTensor — 126 members covered`.
@@ -547,7 +547,7 @@ Expected: `OK`.
 Follow the Task 3 five-gate pattern for `Tensor` (~67 members):
 
 - [ ] **Step 1: Inventory** — `$PY tools/member_inventory.py Tensor > /tmp/Tensor_inventory.txt`.
-- [ ] **Step 2: Write `probes/Tensor.py`** — assert copy-vs-view for `permute`/`reshape`/`contiguous`/slice-assignment, `clone` deep copy, dtype/device conversion, arithmetic operator semantics, `Conj`/`Conj_`. Use `report(...)` and `mutates_alias(...)`.
+- [ ] **Step 2: Write `probes/Tensor.py`** — assert copy-vs-view for `permute`/`reshape`/`contiguous`/slice-assignment, `clone` deep copy, dtype/device conversion, arithmetic operator semantics, `Conj`/`Conj_`. Use `report(...)` and `returns_view(make, derive, mutate, read)` from `probe_helper`.
 - [ ] **Step 3: Run the probe** — expected all `[PASS]`.
 - [ ] **Step 4: Write `per-class/Tensor.md`** — six-section template covering all ~67 members.
 - [ ] **Step 5: Validate** — `$PY tools/validate_doc.py Tensor docs/api-audit/per-class/Tensor.md`; expected `PASS`.
