@@ -430,3 +430,9 @@ is left as-is at runtime and resolved by documentation — linalg C3.)*
   (for `keep`/`add`/`rename`) the numpy-style docstring.
 - The post-rename spellings used here are the ones [`essential-api.md`](essential-api.md)
   consumes when tracing each TRG/HOTRG/CTMRG/MERA step to a concrete API call.
+- The **argument** dimension of X1/N4 (parameter names, positions, defaults) is
+  swept systematically across all units in
+  [`parameter-consistency.md`](parameter-consistency.md), generated from the live
+  pybind signatures by `tools/param_inventory.py` — it collects the cross-*class*
+  divergences (e.g. the three-way `Trace` split, 18 keyword-uncallable methods)
+  that no single per-class doc can see whole.
