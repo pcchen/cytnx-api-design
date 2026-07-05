@@ -53,6 +53,23 @@ int main() {
            &r == &U && U.labels() == std::vector<std::string>{"a", "b"});
   }
 
+  // UT-L6: C++ `relabels_` (deprecated) is a genuine, distinct method -- not
+  // just an alias -- but it is IN-PLACE and returns &*this, same as relabel_.
+  // The Python binding's c_relabels_ skips this real method and calls
+  // self.relabel_(...) directly; this proves that shortcut is behaviorally
+  // equivalent to calling the raw C++ relabels_ it bypasses.
+  {
+    UniTensor U(UniTensor::zeros({2, 3}));
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+    UniTensor& r = U.relabels_(std::vector<std::string>{"a", "b"});
+#pragma GCC diagnostic pop
+    report("C++ relabels_ mutates labels in place and returns &*this (matches "
+           "the header; Python c_relabels_ routes through relabel_ instead, "
+           "which is behaviorally equivalent)",
+           &r == &U && U.labels() == std::vector<std::string>{"a", "b"});
+  }
+
   // set_name returns *this on the C++ side (the conti.py set_name wrapper's
   // return-self mirrors this).
   {

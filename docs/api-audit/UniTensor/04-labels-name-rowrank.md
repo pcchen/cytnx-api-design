@@ -58,7 +58,7 @@ dir(UniTensor)"*; *"raw c_relabel_ returns None …"*.
 | `[[deprecated]] UniTensor &set_labels(...)` (`:2954`) | `set_labels(...)` | signature-differs | binding routes `c_set_labels` → `relabel_`, not `_impl->set_labels` (UT-L4) |
 | `[[deprecated]] UniTensor relabels(...) const` (`:3269`) | `relabels(...)` | identical | deprecated; warns (UT-L5) |
 | `[[deprecated]] UniTensor &relabels_(...)` (`:3244`) | `relabels_(...)` | signature-differs | raw `c_relabels_` returns `None`; warns; conti.py re-adds return-self (UT-L6) |
-| `UniTensor &set_name(...)` (`:2875`) | `set_name(...)` | signature-differs | raw `c_set_name` returns self; conti.py wrapper also returns self (UT-L7) |
+| `UniTensor &set_name(...)` (`:2875`) | `set_name(...)` | identical | conti.py wrapper over raw `c_set_name`; both return self (UT-L7) |
 | `UniTensor &set_rowrank_(...)` (`:2988`) | `set_rowrank_(...)` | identical | in-place, self (UT-L8) |
 | `UniTensor set_rowrank(...) const` (`:2993`) | `set_rowrank(...)` | identical | pure, new object (UT-L9) |
 | raw `c_set_name`/`c_set_label`/`c_set_labels`/`c_relabel_`/`c_relabels_`/`c_set_rowrank_` | same names | **leak** | plumbing exposed publicly (UT-L10) |
@@ -78,12 +78,13 @@ remain for traceability.
 | **UT-L1** | `relabel` returns a **distinct** object whose labels differ but whose **data is shared** with the source | copy/view | **thin pass-through** — the pybind lambda (`:253`) forwards to C++ `relabel(...) const` (`hpp:3259`), which the header documents as returning a new UniTensor sharing storage (`hpp:3255-3257` "*the data is still shared*"). Py probe *"relabel returns a distinct object …"* + *"relabel shares data with the source …"*; **C++ probe confirms** mutating the source is visible through the relabel | **keep**; document the shared-data view semantics |
 | **UT-L2** | `relabel_`'s raw binding returns `None`; chainability comes from a conti.py wrapper | **binding fidelity** (N2/B1) | **binding discards the return**: `c_relabel_` (`:262`) is `[](UniTensor&,...){ self.relabel_(...); }` returning `void`; `cytnx/UniTensor_conti.py:203-222` re-adds `return self`. Py probe *"raw c_relabel_ returns None …"*; **C++ probe confirms** `&U.relabel_(...) == &U` — the C++ method already returns `UniTensor&` (`hpp:3230`) | **keep** `relabel_`; the pybind should return self directly, dropping the conti.py shim |
 | **UT-L3** | `set_label` (in-place, self) is a **third** overlapping label mechanism alongside `relabel_`/`relabel` | redundancy | **thin pass-through** — conti.py over `c_set_label` (`:234`). Py probe *"set_label(idx,new) mutates in place and returns self"* | **remove** — fold into `relabel_(idx, new_label)` (migration note) |
-| **UT-L4** | `set_labels` (deprecated) is **in-place** — its `c_set_labels` calls `relabel_`, contradicting the pure-sounding `set_`/plural name | **binding fidelity** / redundancy | **binding redirects**: `c_set_labels` (`:243`) warns `DeprecationWarning` then calls `self.relabel_(new_labels)` — not `_impl->set_labels`. Py probe *"set_labels is IN-PLACE … despite the pure-sounding name"* + *"… emits a DeprecationWarning"* | **remove** — use `relabel_(new_labels)` (migration note) |
+| **UT-L4** | `set_labels` (deprecated) is **in-place** — its `c_set_labels` calls `relabel_`, contradicting the pure-sounding `set_`/plural name | **binding fidelity** / redundancy | **binding redirects**: `c_set_labels` (`:243`) warns `DeprecationWarning` then calls `self.relabel_(new_labels)` — not `_impl->set_labels`. Py probe *"set_labels is IN-PLACE … despite the pure-sounding name"* + *"… emits a DeprecationWarning"*; **C++ probe confirms** the real C++ `set_labels` (`hpp:2958`, deprecated) mutates in place and returns `&*this` too — the binding's shortcut to `relabel_` is behaviorally equivalent to calling the raw C++ `set_labels` it bypasses | **remove** — use `relabel_(new_labels)` (migration note) |
 | **UT-L5** | `relabels` is a bound-but-deprecated pure alias of `relabel` | redundancy | **binding warns + forwards**: lambda (`:256,296`) emits `DeprecationWarning` then calls `self.relabel(...)`; C++ `relabels` is `[[deprecated]]` (`hpp:3269`). Py probe *"relabels is a deprecated alias of relabel — pure"* + *"… emits a DeprecationWarning"* | **remove** — use `relabel` (migration note) |
-| **UT-L6** | `relabels_` is a bound-but-deprecated in-place alias of `relabel_`; the warning text even names the internal `c_relabels_` | redundancy / **binding fidelity** | **binding warns + forwards**: conti.py (`:225-232`) over `c_relabels_` (`:265`), which warns `"c_relabels_() is deprecated, use relabel_() instead."` then calls `self.relabel_(...)`. Py probe *"relabels_ is a deprecated alias of relabel_ — in-place, returns self"* + *"… emits a DeprecationWarning"* | **remove** — use `relabel_` (migration note) |
-| **UT-L7** | `set_name` mutates in place and returns self | (setter; kept) | **thin pass-through** — conti.py over `c_set_name` (`:231`); C++ `set_name` returns `UniTensor&` (`hpp:2875`). Py probe *"set_name sets the name in place and returns self"*; **C++ probe confirms** `&U.set_name(...) == &U` | **keep** — the sole name setter |
+| **UT-L6** | `relabels_` is a bound-but-deprecated in-place alias of `relabel_`; the warning text even names the internal `c_relabels_` | redundancy / **binding fidelity** | **binding warns + forwards**: conti.py (`:225-232`) over `c_relabels_` (`:265`), which warns `"c_relabels_() is deprecated, use relabel_() instead."` then calls `self.relabel_(...)` — not `_impl->relabels_`. Py probe *"relabels_ is a deprecated alias of relabel_ — in-place, returns self"* + *"… emits a DeprecationWarning"*; **C++ probe confirms** the real C++ `relabels_` (`hpp:3243`, deprecated) is in-place, returns `&*this`, and (per `UniTensor_base::relabels_`) delegates to the same `set_labels` logic as `relabel_` — so the binding's shortcut is behaviorally equivalent to the raw C++ method it bypasses | **remove** — use `relabel_` (migration note) |
+| **UT-L7** | `set_name` mutates in place and returns self | (setter; superseded by UT-L11) | **thin pass-through** — conti.py over `c_set_name` (`:231`); C++ `set_name` returns `UniTensor&` (`hpp:2875`). Py probe *"set_name sets the name in place and returns self"*; **C++ probe confirms** `&U.set_name(...) == &U` | see **UT-L11** — rename to `set_name_`; add a pure `set_name` |
 | **UT-L8/L9** | `set_rowrank_` (in-place, self) vs `set_rowrank` (pure, new object) is a correct N-underscore pair | (kept) | **thin pass-throughs** — `c_set_rowrank_` = `&set_rowrank_` (`:250`), `set_rowrank` bound directly (`:252`). Py probe *"set_rowrank_ … returns self"* + *"set_rowrank (no underscore) is pure …"*; **C++ probe confirms** `&U.set_rowrank_(0)==&U` while `set_rowrank(1)` is a distinct object | **keep both** |
 | **UT-L10** | the raw `c_set_name`/`c_set_label`/`c_set_labels`/`c_relabel_`/`c_relabels_`/`c_set_rowrank_` bindings **leak** into `dir(UniTensor)` | naming + **binding fidelity** | **binding exposes plumbing**: all six `c_*` are `.def(...)`-ed as public methods (`:231-306`) purely so the conti.py wrappers can call them; the `c`-prefix is a reserved raw-binding spelling that must not be public (§R.0 rejects `c`-prefixed in-place spellings). Py probe *"the raw plumbing bindings … all LEAK into public dir(UniTensor)"* | **remove from public API** — bind under a private name (leading `_`) or merge the wrapper into the pybind lambda (migration note) |
+| **UT-L11** | `set_name` is an in-place mutator that returns self but carries **no trailing `_`** — a violation of the doc's own N-underscore rule (§R.0), and inconsistent with how this same doc treats `set_rowrank_`/`set_rowrank` (UT-L8/L9) and `relabel_`/`relabel` | **naming / N-underscore** | same runtime evidence as UT-L7 — conti.py over `c_set_name` (`:231`); C++ `set_name` returns `UniTensor&` (`hpp:2875`). Py probe *"set_name sets the name in place and returns self"* | **rename** `set_name` → `set_name_` (in-place, self); **add** a new pure `set_name(name)` returning a shared-data copy with the new name, mirroring `relabel`/`relabel_`. *Migration:* keep `set_name` bound as a `DeprecationWarning` alias of `set_name_` for one release, then redefine `set_name` as the pure form. |
 
 ## A4. Argument ordering — positional & keyword
 
@@ -133,11 +134,9 @@ Implement Cytnx to match it.*
   that one base name. `set_label`, `set_labels`, `relabels`, `relabels_` are
   redundant and **removed** (deprecated first, UT-L3/L4/L5/L6).
 - **In-place methods return `self` from the binding directly.** `relabel_`,
-  `relabels_`, `set_name`, `set_rowrank_` return self in C++ (`UniTensor&`); the
+  `relabels_`, `set_name_`, `set_rowrank_` return self in C++ (`UniTensor&`); the
   pybind lambda must return self too, so the conti.py return-self shim (and the
-  leaked `c_*` binding it wraps) disappears (UT-L2/L7/L10).
-- **Setters keep their names.** `set_name` (name) and `set_rowrank`/
-  `set_rowrank_` (rowrank) are distinct from label relabeling and are kept.
+  leaked `c_*` binding it wraps) disappears (UT-L2/L7/L10/L11).
 
 ## R.1 Recommended API (exact signatures + behavior contract)
 
@@ -154,12 +153,13 @@ class UniTensor:
     def relabel_(self, *args) -> "UniTensor": ...   # same overloads; IN-PLACE, returns self
 
     # --- name / rowrank setters ---
-    def set_name(self, name: str) -> "UniTensor": ...        # in-place, returns self
+    def set_name(self, name: str) -> "UniTensor": ...        # pure, new object (shared data)
+    def set_name_(self, name: str) -> "UniTensor": ...        # in-place, returns self
     def set_rowrank(self, new_rowrank: int) -> "UniTensor": ...   # pure, new object
     def set_rowrank_(self, new_rowrank: int) -> "UniTensor": ...  # in-place, returns self
 ```
 
-`relabel_`/`set_name`/`set_rowrank_` return `self` **from the binding** (no
+`relabel_`/`set_name_`/`set_rowrank_` return `self` **from the binding** (no
 conti.py shim). The six `c_*` plumbing bindings become private (leading `_`) or
 are inlined into the pybind lambdas — they are **not** public members.
 
@@ -167,7 +167,8 @@ are inlined into the pybind lambdas — they are **not** public members.
 |---|---|---|
 | `relabel` | **keep** (UT-L1) | Pure: returns a new UniTensor with the new labels; internal data shared with the receiver, which is unchanged. Four overloads. |
 | `relabel_` | **keep** (UT-L2; bind return-self directly) | In-place relabel; returns self (chainable). Four overloads. |
-| `set_name` | **keep** (UT-L7) | Set the tensor name in place; returns self. |
+| `set_name` | **rename** current in-place `set_name` → `set_name_`; **add** a new pure `set_name` (UT-L11) | Pure: returns a new UniTensor with the new name; internal data shared with the receiver, which is unchanged. *Migration:* the current in-place `set_name` becomes a deprecated alias of `set_name_` for one release, then `set_name` is redefined as this pure form. |
+| `set_name_` | **add** (UT-L11) | In-place: sets the tensor name and returns self (chainable) — the behavior `set_name` has today. |
 | `set_rowrank` | **keep** (UT-L9) | Pure: returns a new UniTensor with the new rowrank; receiver unchanged. |
 | `set_rowrank_` | **keep** (UT-L8) | Set rowrank in place; returns self. |
 | `set_label` | **remove** (UT-L3) | Redundant single-leg in-place relabel. *Migration:* deprecated alias of `relabel_(idx, new_label)` / `relabel_(old_label, new_label)`, emitting `DeprecationWarning` for one minor release, then deleted. |
@@ -238,12 +239,22 @@ Replaces the removed `set_label`, `set_labels`, `relabels`, `relabels_`
 (findings UT-L3–L6). No label may duplicate another leg's label.
 ```
 
-### `set_name`
+### `set_name` / `set_name_`
 
 ```
-UniTensor.set_name(name) -> UniTensor
+UniTensor.set_name(name)  -> UniTensor   # pure, new object (shared data)
+UniTensor.set_name_(name) -> UniTensor   # in-place, self
 
-Set this tensor's name in place and return self (finding UT-L7).
+Set this tensor's name.
+
+`set_name` is PURE: it returns a new UniTensor carrying the new name while
+leaving this tensor's name unchanged. The returned tensor SHARES its internal
+data with this one (a metadata-only copy, mirroring `relabel`) (finding
+UT-L11).
+
+`set_name_` is the IN-PLACE form: it sets this tensor's name and returns self
+for chaining (finding UT-L11) — this is the behavior the single `set_name`
+had through cytnx 1.1.0 (finding UT-L7).
 
 Parameters
 ----------
@@ -253,7 +264,14 @@ name : str
 Returns
 -------
 UniTensor
-    self (chainable).
+    `set_name`: a new tensor (shared data). `set_name_`: self.
+
+Notes
+-----
+Through cytnx 1.1.0, `set_name` was the sole (in-place) name setter and
+carried no trailing `_`, violating the N-underscore rule (finding UT-L7/L11).
+It is bound as a `DeprecationWarning` alias of `set_name_` for one release,
+then redefined as the pure form documented here.
 ```
 
 ### `set_rowrank` / `set_rowrank_`
@@ -315,12 +333,25 @@ UniTensor &relabel_(const std::vector<std::string> &old_labels,
                     const std::vector<std::string> &new_labels);
 
 /**
- * @brief Set this tensor's name in place; returns *this.
+ * @brief Set this tensor's name, returning a NEW UniTensor (data shared).
+ * @details Pure: the returned tensor carries @p in as its name while *this is
+ *          unchanged, but the internal storage is SHARED (metadata-only copy,
+ *          mirroring relabel(), finding UT-L11).
  * @param in the new name.
- * @return reference to *this (chainable) — the fidelity the Python binding
- *         must preserve without a wrapper (finding UT-L7).
+ * @return a new UniTensor with the new name (shared data).
  */
-UniTensor &set_name(const std::string &in);
+UniTensor set_name(const std::string &in) const;
+
+/**
+ * @brief Set this tensor's name IN PLACE; returns *this.
+ * @details In-place counterpart to the pure set_name() above (finding
+ *          UT-L11) — this is the behavior the single set_name() had through
+ *          cytnx 1.1.0 (finding UT-L7). The pybind lambda must return self
+ *          directly (no conti.py wrapper).
+ * @param in the new name.
+ * @return reference to *this (chainable).
+ */
+UniTensor &set_name_(const std::string &in);
 
 /**
  * @brief Set the row rank (bra-space leg count).
