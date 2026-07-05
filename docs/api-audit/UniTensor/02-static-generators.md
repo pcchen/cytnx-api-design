@@ -5,7 +5,9 @@
 > *normative spec for the next version of Cytnx* — implement the next major
 > version's generator API to match §R exactly. All runtime claims verified
 > against `cytnx==1.1.0` via `docs/api-audit/probes/UniTensor_cat01_02.py`
-> (all `[PASS]`, exit 0).
+> (all `[PASS]`, exit 0), with the raw-C++ side of binding-fidelity findings
+> verified by `probes/cpp/UniTensor_cat01_02.cpp` against a source-built
+> `libcytnx`.
 
 **Category scope:** the `def_static` factory functions that generate a new
 `UniTensor` (fills, ranges, random), the two in-place random fills, and static
@@ -49,12 +51,14 @@ assertion backing any runtime claim. `[I]` = in-place.
 
 ## A3. Findings
 
-Each finding cites its evidence. Behavioral claims quote a probe assertion
-(runtime-verified on the 1.1.0 wheel). A **(binding fidelity)** finding flags
-where the binding layer — a `*_conti.py` wrapper or a pybind lambda — changes
-behavior versus the raw C++ method; its C++ side is established by *reading* the
-header/binding (cited `file:line`, not executed, since the 1.1.0 tree does not
-build) and its Python side by probe.
+Each finding cites its evidence. Python behavioral claims quote a probe
+assertion from `probes/UniTensor_cat01_02.py` (on the 1.1.0 wheel). A **(binding
+fidelity)** finding flags where the binding layer — a `*_conti.py` wrapper or a
+pybind lambda — changes behavior versus the raw C++ method. **Both sides are
+runtime-verified:** the raw-C++ side by `probes/cpp/UniTensor_cat01_02.cpp`, a
+C++ program that links against a locally source-built `libcytnx` (the 1.1.0
+`cytnx_src` tree builds cleanly with GCC 13) and calls the C++ methods directly,
+bypassing the binding. Source `file:line` cites remain for traceability.
 
 | ID | Finding | Type | What the binding does · evidence | Recommendation |
 |---|---|---|---|---|
@@ -62,13 +66,13 @@ build) and its Python side by probe.
 | **UT-G2** | `arange`'s 1-arg overload drops `dtype`/`device`; the `(start,end,…)` form keeps them | signature-differs / ordering | **binding registers two lambdas**: the `(Nelem, labels, name)` lambda declares no `dtype`/`device` `py::arg` at all, while the `(start, end, step, …)` lambda does — so the count form silently can't take a dtype. Probe *"arange(Nelem, dtype=…) is REJECTED"* | both forms take the full metadata block |
 | **UT-G3** | label kwarg is `in_labels` on `normal`/`uniform`, `labels` elsewhere | naming + **binding fidelity** | **binding renames one arg**: `zeros`/`ones` expose `py::arg("labels")` (`:1487,1496`) while `normal`/`uniform` expose `py::arg("in_labels")` (`:1533`) over the *same* underlying C++ parameter — a pure binding-layer divergence. Probe: `normal(labels=…)` raises | expose `labels` everywhere |
 | **UT-G4** | metadata block ordered 4 different ways across generators | ordering (F20 / PC2) | **thin pass-through** — each lambda mirrors its C++ `py::arg` order; the inconsistency exists in C++ too. Live signatures | keyword-only canonical order (§R.0) |
-| **UT-G5** | `normal_`/`uniform_` return `None`, not `self` | **binding fidelity** (N2/B1) | **binding discards the return**: the lambda `[](UniTensor& self, …){ … }` (`:1581`) mutates `self` and returns `void`, dropping C++'s chainable `UniTensor& normal_(…)` (`hpp:5964`). Probe *"… returns None"* | **return `self`** — restores C++ fidelity |
+| **UT-G5** | `normal_`/`uniform_` return `None`, not `self` | **binding fidelity** (N2/B1) | **binding discards the return**: the lambda `[](UniTensor& self, …){ … }` (`:1581`) mutates `self` and returns `void`, dropping C++'s chainable `UniTensor& normal_(…)` (`hpp:5964`). Py probe *"… returns None"*; **C++ probe confirms** `&Z.normal_(…)==&Z` | **return `self`** — restores C++ fidelity |
 | **UT-G6** | `seed=-1` → nondeterministic device seed (`-1` ≠ "seed 0") | documentation | mechanism is the UT-G11 lambda injection (below). Probe (same seed reproduces; `-1` does not) | keep; document |
 | **UT-G7** | extent operand named two ways: `Nelem` (int) / `shape` (list) | naming (positional) | **binding exposes two overloads** — an `int` (`Nelem`) and a `list` (`shape`) `def_static` per generator — for one concept. Probe *"zeros accepts both int-count & list forms"* | collapse to one `shape: int\|list` |
 | **UT-G8** | count slot inconsistent: 1st in shape gens, 3rd in `linspace` | ordering (positional) | **thin pass-through** — lambda mirrors the C++ `(start, end, Nelem)` order. Probe *"linspace … count 3rd"* | **keep** — numpy convention |
 | **UT-G9** | distributions put `shape` first (vs numpy size-last) | ordering (positional) | **thin pass-through** — lambda mirrors C++ `normal(shape, mean, std, …)`. Probe *"normal … shape FIRST"* | **keep** — internal consistency |
 | **UT-G10** | `Load` (a static member) is Capitalized | naming (N-casing) | **thin pass-through** — `def_static("Load", …)` keeps the C++ name verbatim. Source — SciPost convention | **rename** → `load` (`Save`→`save`) |
-| **UT-G11** | `seed==-1 → random_device()` is Python-only sugar injected by the binding | **binding fidelity** | **binding injects logic**: the lambda runs `if(seed==-1) seed = cytnx::random::__static_random_device()` (`:1521-1527`) *before* calling C++ `UniTensor::normal(...)`, which has no such rule. Probe: `seed=-1` is nondeterministic | keep + document (optionally lift to C++) |
+| **UT-G11** | `seed==-1 → random_device()` is Python-only sugar injected by the binding | **binding fidelity** | **binding injects logic**: the lambda runs `if(seed==-1) seed = cytnx::random::__static_random_device()` (`:1521-1527`) *before* calling C++ `UniTensor::normal(...)`, which has no such rule. Py probe: `seed=-1` nondeterministic; **C++ probe confirms** two C++ `normal_(…,-1)` fills are identical (literal seed) | keep + document (optionally lift to C++) |
 
 ## A4. Argument ordering — positional & keyword
 

@@ -6,7 +6,9 @@
 > *normative spec for the next version of Cytnx*: the next major version's
 > `UniTensor` construction API should be implemented to match §R exactly.
 > Every behavioral claim is verified against the installed `cytnx==1.1.0` wheel
-> by `docs/api-audit/probes/UniTensor_cat01_02.py` (all `[PASS]`, exit 0).
+> by `docs/api-audit/probes/UniTensor_cat01_02.py` (all `[PASS]`, exit 0);
+> raw-C++ facts are additionally verified by `probes/cpp/UniTensor_cat01_02.cpp`
+> against a locally source-built `libcytnx`.
 
 **Category scope:** the ways to *make* a `UniTensor` from existing data — the
 three constructor overloads and the public `Init` re-initializer. Static
@@ -56,7 +58,7 @@ constructor, so C++ and Python behavior coincide here.
 | ID | Finding | Type | What the binding does · evidence | Recommendation |
 |---|---|---|---|---|
 | **UT-C1** | `Init` is a public duplicate of the constructor | redundancy | **thin pass-through** — the `Init` lambda (`:217-226`) re-runs the constructor logic in place. Probe *"Init is public and re-initializes …"* | demote to private `_init` (deprecate 1 release) |
-| **UT-C2** | from-`Tensor` shares memory (view); from-`bonds` owns fresh storage | copy/view (B2) | **thin pass-through** — `py::init<>` wraps the C++ ctors faithfully; the from-`Tensor` memory sharing is C++ behavior, not a binding artifact. Probe *"UniTensor(Tensor) shares memory …"* | document per-constructor |
+| **UT-C2** | from-`Tensor` shares memory (view); from-`bonds` owns fresh storage | copy/view (B2) | **thin pass-through** — `py::init<>` wraps the C++ ctors faithfully; the from-`Tensor` memory sharing is C++ behavior, not a binding artifact. Py probe *"UniTensor(Tensor) shares memory …"*; **C++ probe confirms** the share on the raw C++ side | document per-constructor |
 | **UT-C3** | no numpy bridge (`from_numpy` / `.numpy()`) | capability gap (vs `Tensor`) | **nothing to bind** — `from_numpy` is absent in C++ too, so this is an add, not an unbound member. Source | **add** `from_numpy` |
 | **UT-C4** | constructor metadata order inconsistent (`is_diag` 1st↔6th, `labels` 3rd↔1st) *and* **positional**, so any reorder silently breaks positional callers | ordering — naming/order/compat (see A4) | **thin pass-through** — the `py::init` arg order mirrors the C++ ctor; the inconsistency exists in C++ too. Live signatures; F20 / PC2 | make the metadata block **keyword-only** (§R.0) |
 
