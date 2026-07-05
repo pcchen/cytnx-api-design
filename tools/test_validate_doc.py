@@ -82,6 +82,38 @@ def test_covered_members_single_text_only_finds_its_own_members():
     assert covered == {"alpha"}
 
 
+# --- members_requiring_docstrings (signature-cell false positives) --------
+
+def test_signature_api_cell_does_not_leak_prose_token_as_member():
+    """A verdict row whose API cell is a signature (no bare identifier) must
+    NOT treat an incidental backtick token in a later cell as its member.
+
+    Regression: `| `UniTensor()` | keep | … (`Void`) … |` used to demand a
+    docstring for `Void`, and `| `UniTensor.from_numpy(array, …)` | add |
+    copies `array` |` for `array` — neither is a real member.
+    """
+    rec = textwrap.dedent("""
+        | `UniTensor()` | **keep** | Empty, un-initialized (`Void`) rank-0 tensor. |
+        | `UniTensor.from_numpy(array, *, …)` | **add** | Dense; **copies** `array`. |
+    """)
+    needs = validate_doc.members_requiring_docstrings(rec)
+    assert "Void" not in needs
+    assert "array" not in needs
+
+
+def test_normal_verdict_row_still_yields_its_api_member():
+    """A well-formed row (`| `foo` | keep | … |`) still requires foo's docstring;
+    a bare-identifier add row still requires the new member."""
+    rec = textwrap.dedent("""
+        | `from_numpy` (→ add, static) | `array` | copies `array` |
+        | `rank` | keep | number of legs |
+        | `Nblocks` → `nblocks` | rename | block count |
+        | `old_thing` | remove | dropped |
+    """)
+    needs = validate_doc.members_requiring_docstrings(rec)
+    assert needs == {"from_numpy", "rank", "Nblocks"}
+
+
 # --- CLI end-to-end (directory union) -------------------------------------
 
 def test_cli_directory_unions_category_coverage(tmp_path):

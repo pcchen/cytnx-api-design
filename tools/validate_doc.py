@@ -39,28 +39,55 @@ def public_members(obj):
     return {m for m in dir(obj) if not m.startswith("_")}
 
 
+def _row_member(line):
+    """The member a Recommendation row is *about*: the first backtick-quoted
+    identifier in the row's **API cell**, not merely the first one on the line.
+
+    For a Markdown table row (`| … | … | … |`) the API cell is the first cell.
+    A signature-style API cell like `` `UniTensor.from_numpy(array, …)` `` or
+    `` `UniTensor()` `` yields no bare identifier (dots/parens defeat the strict
+    ``\\`name\\``` token match), so such a row is about no single bare member and
+    contributes nothing — this stops an incidental prose token in a *later* cell
+    (e.g. a `` `Void` `` state note or an `` `array` `` parameter mention) from
+    masquerading as the row's member and demanding a docstring it never needs.
+    For a non-table line the whole line is treated as the cell (unchanged
+    behaviour for prose verdicts like "we **keep** `foo`").
+    """
+    stripped = line.strip()
+    if stripped.startswith("|"):
+        cells = stripped.split("|")
+        # cells[0] is '' (before the leading pipe); cells[1] is the API column.
+        api_cell = cells[1] if len(cells) > 1 else ""
+    else:
+        api_cell = line
+    m = re.search(r"`([A-Za-z_][A-Za-z0-9_]*)`", api_cell)
+    return m.group(1) if m else None
+
+
 def members_requiring_docstrings(rec_text):
     """Scan Recommendation-section rows for `member` names tagged keep/add/rename.
 
-    Heuristic: a row is any line containing a backtick-quoted identifier; the
-    first such identifier on the line is taken as the member name, and the
-    row's verdict is the first keep/add/rename/remove word (case-insensitive)
-    found on that same line. Members tagged only "remove" are exempt.
+    Heuristic: a row's member is the first backtick-quoted identifier in its
+    **API cell** (see `_row_member`); the row's verdict is the first
+    keep/add/rename/remove word (case-insensitive) found anywhere on that line.
+    A row whose API cell holds only a signature (no bare identifier) contributes
+    no member — incidental prose tokens never trigger a docstring requirement.
+    Members tagged only "remove" are exempt.
     """
     verdict_re = re.compile(
         r"\b(" + "|".join(sorted(ALL_VERDICTS)) + r")\b", re.IGNORECASE
     )
     required = set()
     for line in rec_text.splitlines():
-        names = re.findall(r"`([A-Za-z_][A-Za-z0-9_]*)`", line)
-        if not names:
+        member = _row_member(line)
+        if member is None:
             continue
         verdict_match = verdict_re.search(line)
         if not verdict_match:
             continue
         verdict = verdict_match.group(1).lower()
         if verdict in DOCUMENTED_VERDICTS:
-            required.add(names[0])
+            required.add(member)
     return required
 
 
@@ -77,12 +104,16 @@ def has_docstring(member, docstrings_text):
 def _docs(path):
     """Return the sorted list of `.md` files to validate for `path`.
 
-    A directory expands to its (sorted) `*.md` children — the categorized
-    layout, one file per category. A file is returned as a singleton list —
-    the original flat-doc layout, unchanged.
+    A directory expands to its (sorted) **numbered** `NN-*.md` children — the
+    categorized layout, one file per category. The `[0-9]*.md` glob deliberately
+    excludes non-category companions in the same directory (the `inventory.md`
+    index and the `element-dtypes.md` appendix), which carry no `# R.` spec and
+    are not part of the category partition — matching the partition check in the
+    Task-12 brief. A file argument is returned as a singleton list — the
+    original flat-doc layout, unchanged.
     """
     if os.path.isdir(path):
-        return sorted(glob.glob(os.path.join(path, "*.md")))
+        return sorted(glob.glob(os.path.join(path, "[0-9]*.md")))
     return [path]
 
 

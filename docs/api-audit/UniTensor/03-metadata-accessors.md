@@ -15,7 +15,7 @@ element/storage identity (`dtype`, `device`, `uten_type`, `name`,
 `is_contiguous`), classification predicates (`is_diag`, `is_tag`,
 `is_braket_form`, `is_blockform`), and its leg / symmetry structure (`labels`,
 `get_index`, `syms`, `bonds`, `bond`, `bond_`, `signflip`, `same_data`,
-`elem_exists`, `get_qindices`, `getTotalQnums`, `get_blocks_qnums`). None mutate
+`get_qindices`, `getTotalQnums`, `get_blocks_qnums`). None mutate
 the tensor's data. Constructors are [category 01](01-construction-init.md);
 generators are [category 02](02-static-generators.md).
 
@@ -60,7 +60,6 @@ assertion backing any runtime claim. All are member accessors on `self`.
 | `bond_` | `bond_(idx:int)` / `bond_(label:str)` | `Bond` — **view** | One leg, shares the parent's Bond. Probe: *"bond_(i) is a VIEW — redirect_ on it flips the parent's bond direction"*. |
 | `signflip` | `signflip()` | `list[bool]` | Per-leg fermion sign flags — **BlockFermionic only**. Probe: *"signflip() returns list[bool] on a BlockFermionic tensor"* / *"… RAISES on a bosonic … block tensor"*. |
 | `same_data` | `same_data(arg0: UniTensor)` | `bool` | Do two tensors share storage? Probe: *"same_data(self) is True …"* / *"same_data(clone) is False …"*. |
-| `elem_exists` | `elem_exists(arg0: list[int])` | `bool` | Is a locator inside an allowed block? (symmetric only). Probe: *"elem_exists([0,0]) is True … / elem_exists([0,1]) is False …"*. |
 | `get_qindices` | `get_qindices(arg0: int)` | `list[int]` | Per-block qnum-index list for a leg (symmetric only). Probe: *"get_qindices(0) returns … [0, 0]"*. |
 | `getTotalQnums` | `getTotalQnums(physical=False)` | `list[Bond]` | **Bound but non-functional** — raises on every tensor type. Probe: *"getTotalQnums on a block/dense tensor RAISES …"*. |
 | `get_blocks_qnums` | `get_blocks_qnums()` | `list[list[int]]` | **Bound but non-functional** — raises on every tensor type. Probe: *"get_blocks_qnums on a block/dense tensor RAISES …"*. |
@@ -80,7 +79,6 @@ Status: `identical` · `renamed` · `signature-differs` · `C++-only` · `Python
 | `Bond& bond_(idx)` (`:127`) | `bond_(idx\|label)` | identical | returns a shell that shares the parent's Bond impl (view) |
 | `signflip() const` | `signflip()` | identical | BlockFermionic-only; base raises (UT-M7) |
 | `same_data(rhs) const` | `same_data(arg0)` | identical | arg name erased to `arg0` (UT-M5) |
-| `elem_exists(locator) const` | `elem_exists(arg0)` | identical | arg name erased (UT-M5) |
 | `get_qindices(bidx) const` (`:1606`) | `get_qindices(arg0)` | identical | arg name erased (UT-M5) |
 | `getTotalQnums(physical=false)` (`:4745`, *"@note This API just have not support"* at `:4743`) | `getTotalQnums(physical=False)` | identical | name kept verbatim (camelCase) in 1.1.0; snake_case rename (`get_total_qnums`) is recommended in §R only (UT-M2/UT-M6) |
 | `get_blocks_qnums() const` (`:4752`, same *"not support"* note at `:4750`) | `get_blocks_qnums()` | identical | already snake; **non-functional** (UT-M6) |
@@ -106,7 +104,7 @@ choice, not a behavior divergence.
 | **UT-M2** | `getTotalQnums` is camelCase | naming (N-casing) | **thin pass-through** — `.def("getTotalQnums", …)` (`:760`) keeps the C++ name | **rename** → `get_total_qnums` |
 | **UT-M3** | `bonds()` returns a **copied container** whose `Bond` elements still **share** the parent's impl | copy/view (B2) | **binding copies the vector by value** (`:491`); the copied list can't resize the parent's leg set (unlike the C++ non-const `&`), but a leg mutated *in place* through it reaches the parent. Probe: *"bonds() copies the list but its Bond elements share the parent's impl"* | document the two-level semantics; recommend a `bonds()` that yields per-leg copies (use `bond_(i)` for a deliberate view) |
 | **UT-M4** | `bond` (copy) / `bond_` (view) is a correctly-formed N-underscore pair | naming (N-underscore) — **conformant** | **thin pass-through** — `bond` clones (`hpp:3151`), `bond_` returns a shared shell (`hpp:127`). Probe: *"bond_(i) is a VIEW …"* / *"bond(i) is a COPY …"* | **keep both** — canonical view/copy pair; document the split |
-| **UT-M5** | `same_data`/`elem_exists`/`get_qindices`/`get_index` erase their argument name to `arg0` | naming (parameter consistency, PC1) | **binding drops the `py::arg`** — `.def("same_data", &UniTensor::same_data)` (`:489`), `elem_exists` (`:347`), `get_qindices` (`:1606`), `get_index` (`:323`) register no `py::arg(...)`, so the parameter is positional-only. Probe: *"same_data(rhs=…) is REJECTED"*, *"elem_exists(locator=…) is REJECTED"*, *"get_qindices(bidx=…) is REJECTED"*, *"get_index(label=…) is REJECTED"* | add real `py::arg` names (`other`, `locator`, `bond_idx`, `label`) |
+| **UT-M5** | `same_data`/`get_qindices`/`get_index` erase their argument name to `arg0` | naming (parameter consistency, PC1) | **binding drops the `py::arg`** — `.def("same_data", &UniTensor::same_data)` (`:489`), `get_qindices` (`:1606`), `get_index` (`:323`) register no `py::arg(...)`, so the parameter is positional-only. Probe: *"same_data(rhs=…) is REJECTED"*, *"get_qindices(bidx=…) is REJECTED"*, *"get_index(label=…) is REJECTED"* | add real `py::arg` names (`other`, `bond_idx`, `label`) |
 | **UT-M6** | `getTotalQnums`/`get_blocks_qnums` are advertised yet **raise on every tensor type** | correctness / documentation | **thin pass-through to a broken C++ method** — the C++ header marks both *"@note This API just have not support"* (`hpp:4743,4750`); on **Dense**, `DenseUniTensor` itself raises *"can only operate on UniTensor with symmetry"* (`UniTensor.hpp:807,813`); on **Block**, the call falls through to the un-initialized `UniTensor_base` (`UniTensor_base.cpp:499,504`). Probe: *"getTotalQnums/get_blocks_qnums on a block/dense tensor RAISES …"* (4 assertions) | **implement** them for Block tensors (their documented domain) or **remove**; if kept, rename `getTotalQnums`→`get_total_qnums` (UT-M2) |
 | **UT-M7** | `signflip` is a BlockFermionic-only accessor that raises on bosonic tensors | documentation | **thin pass-through** — `.def("signflip", &UniTensor::signflip)` (`:497`); the base raises *"signflip is only defined for BlockFermionicUniTensor"* (`UniTensor_base.cpp:66`). Probe: *"signflip() returns list[bool] on a BlockFermionic tensor"* / *"… RAISES on a bosonic … block tensor"* | **keep**; document the fermionic-only precondition |
 
@@ -120,12 +118,11 @@ vacuous. The few that take an argument take exactly **one** operand:
 | `get_index` | `label: str` | name erased? no — `get_index(arg0)` (still positional-only, UT-M5) |
 | `bond` / `bond_` | `idx: int` **or** `label: str` | overloaded selector; no ordering issue |
 | `same_data` | `other: UniTensor` | name erased to `arg0` (UT-M5) |
-| `elem_exists` | `locator: list[int]` | name erased to `arg0` (UT-M5) |
 | `get_qindices` | `bond_idx: int` | name erased to `arg0` (UT-M5) |
 | `getTotalQnums` | `physical: bool = False` | should be **keyword-only** (a flag, not an operand) |
 
 - **Positional:** each accessor with an operand takes it as the single required
-  positional (`label`, `idx`, `other`, `locator`, `bond_idx`) — canonical and
+  positional (`label`, `idx`, `other`, `bond_idx`) — canonical and
   trivial. The only optional argument in the category, `physical` on
   `getTotalQnums`, is a boolean flag and becomes **keyword-only** (§R.0).
 - **Keyword:** the fix is not *order* but *names* (UT-M5) — restore the erased
@@ -158,8 +155,8 @@ rationale; they are not needed to implement §R.*
   elements share the parent's impl (UT-M3) — the recommended `bonds()` yields
   per-leg copies, with `bond_(i)` the explicit opt-in for a view.
 - **N-argname — no erased `arg0` parameters.** Every operand carries a real,
-  keyword-callable name (UT-M5): `same_data(other)`, `elem_exists(locator)`,
-  `get_qindices(bond_idx)`, `get_index(label)`. Boolean flags are keyword-only
+  keyword-callable name (UT-M5): `same_data(other)`, `get_qindices(bond_idx)`,
+  `get_index(label)`. Boolean flags are keyword-only
   (`getTotalQnums`'s `physical`).
 - **Functional contract — no advertised-but-broken members.**
   `get_total_qnums` and `get_blocks_qnums` must actually return their quantum
@@ -171,7 +168,7 @@ rationale; they are not needed to implement §R.*
 
 - **N-positional — one named operand where applicable; flags keyword-only.**
   Accessors take at most one required positional (`idx`|`label`, `other`,
-  `locator`, `bond_idx`), always named; `physical` is keyword-only.
+  `bond_idx`), always named; `physical` is keyword-only.
 
 ## R.1 Recommended API (exact signatures + behavior contract)
 
@@ -206,7 +203,6 @@ class UniTensor:
     def syms(self) -> list[Symmetry]: ...
     def signflip(self) -> list[bool]: ...         # BlockFermionic only (UT-M7)
     def same_data(self, other: "UniTensor") -> bool: ...     # was arg0 (UT-M5)
-    def elem_exists(self, locator: list[int]) -> bool: ...   # was arg0 (UT-M5)
     def get_qindices(self, bond_idx: int) -> list[int]: ...  # was arg0 (UT-M5)
     def get_total_qnums(self, *, physical: bool = False) -> list[Bond]: ...  # was getTotalQnums (UT-M2/M6)
     def get_blocks_qnums(self) -> list[list[int]]: ...       # must work on Block (UT-M6)
@@ -227,7 +223,6 @@ class UniTensor:
 | `syms` | **keep** | The tensor's symmetry objects. |
 | `signflip` | **keep** (UT-M7) | Per-leg fermion sign flags; **BlockFermionic only** — raises otherwise. |
 | `same_data` | **keep** (name `arg0`→`other`, UT-M5) | True iff `self` and `other` share storage. |
-| `elem_exists` | **keep** (name `arg0`→`locator`, UT-M5) | True iff `locator` lands in an allowed block; symmetric only. |
 | `get_qindices` | **keep** (name `arg0`→`bond_idx`, UT-M5) | Per-block qnum-index list for a leg; symmetric only. |
 | `getTotalQnums` → `get_total_qnums` | **rename + fix** (UT-M2/M6) | Total quantum numbers of the tensor; must **work on Block tensors** (1.1.0 raises everywhere). `physical` keyword-only. *Migration:* keep `getTotalQnums` as a `DeprecationWarning` alias one release. |
 | `get_blocks_qnums` | **keep + fix** (UT-M6) | Per-block quantum numbers; must **work on Block tensors** (1.1.0 raises everywhere). |
@@ -349,11 +344,10 @@ RuntimeError
     `signflip` on a non-fermionic (bosonic) tensor (finding UT-M7).
 ```
 
-### `UniTensor.same_data` / `UniTensor.elem_exists` / `UniTensor.get_qindices`
+### `UniTensor.same_data` / `UniTensor.get_qindices`
 
 ```
 UniTensor.same_data(other) -> bool
-UniTensor.elem_exists(locator) -> bool
 UniTensor.get_qindices(bond_idx) -> list[int]
 
 Symmetry / storage queries. Parameters are renamed from the erased `arg0`
@@ -364,9 +358,6 @@ Parameters
 other : UniTensor
     Another tensor; `same_data` is True iff it shares storage with `self`
     (a `clone()` does not — it allocates independent storage).
-locator : list[int]
-    An element index tuple; `elem_exists` is True iff it lands in an allowed
-    symmetry block (symmetric tensors only).
 bond_idx : int
     A leg index; `get_qindices` returns its per-block qnum-index list
     (symmetric tensors only).
@@ -449,14 +440,12 @@ Bond &bond_(const cytnx_uint64 &idx);       Bond &bond_(const std::string &label
 /**
  * @brief Symmetry / storage queries. Parameters named (not arg0; UT-M5).
  * @param other    another tensor (same_data: shares storage?).
- * @param locator  element index tuple (elem_exists: in an allowed block?).
  * @param bond_idx a leg index (get_qindices: per-block qnum indices).
  * @note signflip() is defined only for BlockFermionic tensors (UT-M7).
  */
 std::vector<Symmetry> syms() const;
 std::vector<bool> signflip() const;
 bool same_data(const UniTensor &other) const;
-bool elem_exists(const std::vector<cytnx_uint64> &locator) const;
 std::vector<cytnx_uint64> get_qindices(const cytnx_uint64 &bond_idx) const;
 
 /**

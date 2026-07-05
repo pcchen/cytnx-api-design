@@ -118,10 +118,6 @@ report("same_data(clone) is False (clone() allocates independent storage)",
 # symmetric-only accessors on the block tensor
 # =========================================================================
 report("syms() returns the tensor's symmetry list (one U(1))", len(B.syms()) == 1)
-report("elem_exists([0,0]) is True — the (Q=0,Q=0) block exists",
-       B.elem_exists([0, 0]) is True)
-report("elem_exists([0,1]) is False — (Q=0,Q=1) is symmetry-forbidden",
-       B.elem_exists([0, 1]) is False)
 report("get_qindices(0) returns the per-block qnum-index list [0, 0]",
        B.get_qindices(0) == [0, 0])
 
@@ -170,8 +166,6 @@ def _rejects_kw(call):
 
 report("same_data's arg is erased to arg0 — same_data(rhs=...) is REJECTED (PC1)",
        _rejects_kw(lambda: B.same_data(rhs=B)))
-report("elem_exists's arg is erased to arg0 — elem_exists(locator=...) is REJECTED (PC1)",
-       _rejects_kw(lambda: B.elem_exists(locator=[0, 0])))
 report("get_qindices's arg is erased to arg0 — get_qindices(bidx=...) is REJECTED (PC1)",
        _rejects_kw(lambda: B.get_qindices(bidx=0)))
 report("get_index's arg is erased to arg0 — get_index(label=...) is REJECTED (PC1/UT-M5)",
