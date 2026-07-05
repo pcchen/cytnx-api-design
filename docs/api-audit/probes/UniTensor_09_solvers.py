@@ -176,6 +176,16 @@ report("Lanczos on a UniTensor start vector returns a list of UniTensors "
 report("Lanczos UniTensor path yields the same ground-state eigenvalue as the "
        "dense Eigh", np.isclose(float(r_ut[0].item()), gnd, atol=1e-8))
 
+# 5a. the method='Gnd' family also accepts a UniTensor start vector (not just
+#     the which='SA' ARPACK family above) — the route this doc cites for the
+#     1.1.0 UniTensor ground state.
+with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+    r_ut_gnd = la.Lanczos(op, ut0, method="Gnd")
+report("Lanczos(Hop, ut_v0, method='Gnd') also runs on a UniTensor start "
+       "vector and matches the same ground-state eigenvalue",
+       isinstance(r_ut_gnd, list) and all(isinstance(x, UT) for x in r_ut_gnd)
+       and np.isclose(float(r_ut_gnd[0].item()), gnd, atol=1e-8))
+
 # ---------------------------------------------------------------------------
 # 6. Lanczos_Exp — action of the matrix exponential exp(tau*H) @ v (UniTensor).
 # ---------------------------------------------------------------------------
@@ -201,5 +211,11 @@ report("Arnoldi(op, v, which='SR') runs and returns eigen-results",
        isinstance(r_arn, list) and len(r_arn) >= 1)
 report("Arnoldi smallest-real eigenvalue matches the dense ground state on a "
        "Hermitian operator", np.isclose(float(np.real(r_arn[0].item())), gnd, atol=1e-6))
+
+# 7a. which='SM' ('smallest magnitude') is NOT one of the ARPACK codes this
+#     binding accepts (its C++ core only recognizes LM/LR/LI/SR/SI) — it raises
+#     a RuntimeError from the underlying ARPACK argument check.
+report("Arnoldi(op, v, which='SM') is unsupported and raises RuntimeError",
+       raises(lambda: la.Arnoldi(op, rvec(), which="SM"), RuntimeError))
 
 print("UniTensor 09 probe ok")
