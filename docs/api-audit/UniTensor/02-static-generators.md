@@ -226,7 +226,12 @@ Positional order per N-positional; `shape` is one operand accepting `int` or
 | `normal_` / `uniform_` | **keep, but return `self`** (UT-G5) | In-place fill; chainable. |
 | `Load` → `load` | **rename** (member → lowercase, UT-G10) | Deserialize a saved UniTensor. *Migration:* keep `Load` as a `DeprecationWarning` alias one release. |
 
-## R.2 Docstrings (normative, numpy-style)
+## R.2 Docstrings (normative)
+
+Documented in both languages' idioms: **R.2a** numpy-style for the Python
+surface, **R.2b** Doxygen for the C++ surface.
+
+### R.2a Python API (numpy-style)
 
 ### `UniTensor.zeros` / `UniTensor.ones`
 
@@ -362,4 +367,99 @@ Returns
 -------
 UniTensor
     The deserialized tensor.
+```
+
+### R.2b C++ API (Doxygen)
+
+C++ has no keyword-only parameters (the metadata are default arguments in the
+canonical order). All are `static` members returning `UniTensor`, except the
+in-place fills, which return `UniTensor&` (UT-G5).
+
+```cpp
+/**
+ * @brief Create a Dense UniTensor filled with 0 (zeros) or 1 (ones).
+ * @param shape   size of each leg (a scalar builds a rank-1 tensor).
+ * @param labels  leg labels; default {"0","1",...}.
+ * @param rowrank row (bra) space leg count; -1 auto-selects.
+ * @param dtype   element type, e.g. Type.Double.
+ * @param device  storage device, e.g. Device.cpu.
+ * @param name    tensor name.
+ * @return a Dense UniTensor with every element 0 (or 1).
+ */
+static UniTensor zeros(const std::vector<cytnx_uint64> &shape,
+                       const std::vector<std::string> &labels = {},
+                       const cytnx_int64 &rowrank = -1,
+                       const unsigned int &dtype = Type.Double,
+                       const int &device = Device.cpu,
+                       const std::string &name = "");
+static UniTensor ones(/* ...identical to zeros... */);
+
+/**
+ * @brief Create a rank-2 identity (delta) UniTensor of size @p dim.
+ * @param dim     dimension of the square identity.
+ * @param is_diag store only the diagonal (memory-efficient rank-2 form).
+ * @param labels,rowrank,dtype,device,name  as for zeros().
+ * @return a dim x dim identity UniTensor.
+ */
+static UniTensor identity(const cytnx_uint64 &dim,
+                          const std::vector<std::string> &labels = {},
+                          const cytnx_int64 &rowrank = -1,
+                          const bool &is_diag = false, /* dtype,device,name */);
+
+/**
+ * @brief Create a rank-1 UniTensor of evenly spaced values (numpy order).
+ * @param start,end,step  range: start (incl.) to end (excl.) by step.
+ * @param labels,rowrank,dtype,device,name  as for zeros().
+ * @return a rank-1 Dense UniTensor.
+ */
+static UniTensor arange(const cytnx_double &start, const cytnx_double &end,
+                        const cytnx_double &step = 1, /* metadata... */);
+
+/**
+ * @brief Create a rank-1 UniTensor of @p num evenly spaced samples over [start,end].
+ * @param start,end  interval endpoints (@p end included iff @p endpoint).
+ * @param num        number of samples.
+ * @param endpoint   whether @p end is the last sample.
+ * @param labels,rowrank,dtype,device,name  as for zeros().
+ * @return a rank-1 Dense UniTensor.
+ */
+static UniTensor linspace(const cytnx_double &start, const cytnx_double &end,
+                          const cytnx_uint64 &num, const bool &endpoint = true,
+                          /* metadata... */);
+
+/**
+ * @brief Create a Dense UniTensor of random elements: N(mean,std^2) / U[low,high).
+ * @param shape     size of each leg.
+ * @param mean,std  normal-distribution parameters (normal()).
+ * @param low,high  uniform-distribution bounds (uniform()).
+ * @param seed      RNG seed; the same seed reproduces the tensor. NOTE: the -1
+ *                  -> random_device convenience is a Python-binding feature
+ *                  (UT-G11); in C++ pass an explicit seed.
+ * @param labels,rowrank,dtype,device,name  as for zeros().
+ * @return a Dense UniTensor of the requested random samples.
+ */
+static UniTensor normal(const std::vector<cytnx_uint64> &shape,
+                        const double &mean, const double &std,
+                        /* labels,rowrank,dtype,device,seed,name */);
+static UniTensor uniform(const std::vector<cytnx_uint64> &shape,
+                         const double &low, const double &high, /* ... */);
+
+/**
+ * @brief Fill this tensor in place with random samples; returns *this.
+ * @param mean,std / low,high  distribution parameters.
+ * @param seed  RNG seed.
+ * @return reference to *this (chainable) — the fidelity the Python binding must
+ *         preserve (UT-G5).
+ */
+UniTensor &normal_(const double &mean, const double &std,
+                   const cytnx_int64 &seed = -1);
+UniTensor &uniform_(const double &low, const double &high,
+                    const cytnx_int64 &seed = -1);
+
+/**
+ * @brief Load a UniTensor previously written by save().
+ * @param fname  path to the saved file.
+ * @return the deserialized UniTensor.
+ */
+static UniTensor load(const std::string &fname);
 ```

@@ -149,7 +149,12 @@ class UniTensor:
 
 No constructor is deleted; only reordered-to-keyword-only and `Init` demoted.
 
-## R.2 Docstrings (normative, numpy-style)
+## R.2 Docstrings (normative)
+
+Documented in both languages' idioms: **R.2a** numpy-style for the Python
+surface, **R.2b** Doxygen for the C++ surface.
+
+### R.2a Python API (numpy-style)
 
 ### `UniTensor.__init__`
 
@@ -223,3 +228,43 @@ UniTensor.numpy : inverse conversion (dense only).
 ```
 
 `Init` is demoted to private `_init` and carries no public docstring.
+
+### R.2b C++ API (Doxygen)
+
+C++ has no keyword-only parameters, so the metadata are default arguments in the
+canonical order. `from_numpy` is Python-only (no C++ numpy bridge) — no C++
+entry; `Init` is demoted — no public doc.
+
+```cpp
+/// @brief Construct an empty, un-initialized (Void) rank-0 UniTensor.
+UniTensor();
+
+/**
+ * @brief Wrap an existing dense Tensor as a UniTensor; SHARES its memory (view).
+ * @param Tin     dense data to wrap; its shape defines the legs. dtype/device
+ *                are inherited from @p Tin.
+ * @param labels  leg labels; default {"0","1",...}.
+ * @param rowrank legs forming the row (bra) space; -1 auto-selects.
+ * @param is_diag store only the diagonal (rank-2, square).
+ * @param name    human-readable tensor name.
+ */
+UniTensor(const Tensor &Tin, const std::vector<std::string> &labels = {},
+          const cytnx_int64 &rowrank = -1, const bool &is_diag = false,
+          const std::string &name = "");
+
+/**
+ * @brief Build a UniTensor from a list of Bond objects; owns fresh storage.
+ * @param bonds   one Bond per leg; defines rank, shape, and symmetry.
+ * @param labels  leg labels; default {"0","1",...}.
+ * @param rowrank row (bra) space leg count; -1 auto-selects.
+ * @param is_diag store only the diagonal (rank-2, square).
+ * @param dtype   element type, e.g. Type::Double.
+ * @param device  storage device, e.g. Device::cpu.
+ * @param name    human-readable tensor name.
+ */
+UniTensor(const std::vector<Bond> &bonds,
+          const std::vector<std::string> &labels = {},
+          const cytnx_int64 &rowrank = -1, const bool &is_diag = false,
+          const unsigned int &dtype = Type.Double,
+          const int &device = Device.cpu, const std::string &name = "");
+```

@@ -86,7 +86,12 @@ Self-contained; a Cytnx implementer codes to it directly.
   `| API | Verdict | Behavior contract |` where Verdict ∈
   {keep, add, rename, remove} and the contract states copy/view, in-place, and
   defaults.
-- **R.2 — Docstrings.** Numpy-style, for every kept/added/renamed API.
+- **R.2 — Docstrings.** For every kept/added/renamed API, documented in **both**
+  languages' idioms: **numpy-style** for the Python surface (`R.2a`) and
+  **Doxygen** (`@brief`/`@param`/`@return`, matching Cytnx's existing C++ docs)
+  for the C++ surface (`R.2b`). Both carry the same semantic content over each
+  language's recommended signature. (A Python-only member such as `from_numpy`
+  has no `R.2b` entry; a C++-only member has no `R.2a` entry.)
 
 ## 5. Normative conventions
 
@@ -221,13 +226,19 @@ when redone, the v1 doc is superseded (notably reversing the linalg casing).
 
 ## 11. Open decisions (to confirm at spec review)
 
-1. **Docstring style** — numpy (pilot uses this) vs Google (sibling). *Lean:
-   numpy.*
-2. **Flat vs categorized** — the categorized `<Class>/NN-*.md` set becomes
-   canonical; the flat `per-class/<Class>.md` is retired as each class is
-   redone. *Lean: yes.*
-3. **C++ probes** — keep as an optional, source-build-gated layer used for
-   binding-fidelity findings only (not every claim), given the build cost.
-   *Lean: yes, binding-fidelity only.*
-4. **Pilot ordering calls** — keep numpy order for range generators (UT-G8) and
-   shape-first for distributions (UT-G9). *Lean: yes.*
+1. **Docstring style** — *Resolved:* **Doxygen** (`@param`/`@return`) for the
+   recommended **C++** API (matches Cytnx's existing C++ docs) + **numpy-style**
+   for the recommended **Python** API. R.2 is bilingual (R.2a Python / R.2b C++).
+2. **Flat vs categorized** — *Resolved:* the categorized `<Class>/NN-*.md` set
+   becomes canonical; the flat `per-class/<Class>.md` is retired as each class is
+   redone under this method (avoids two drifting sources of truth).
+3. **C++ probes** — *Resolved:* **binding-fidelity findings only.** The Python
+   wheel probe stays the required default for all behavioral claims (it already
+   executes the compiled C++); the raw-C++ probe is pulled out only to verify
+   the raw-C++ side of a binding-fidelity finding, keeping the source-build cost
+   proportional to need. A category with no binding-fidelity finding needs no
+   C++ probe.
+4. **Pilot ordering calls** — *Resolved:* keep numpy order for range generators
+   (`linspace(start, end, num)`, UT-G8) and shape-first for distributions
+   (`normal(shape, mean, std)`, UT-G9) — both are "inconsistent-but-conventional"
+   (community/internal consistency), documented rather than "fixed".
