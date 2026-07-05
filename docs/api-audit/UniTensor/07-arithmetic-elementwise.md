@@ -118,9 +118,9 @@ the raw C++ method; **both sides are runtime-verified**, the raw-C++ side by
 |---|---|---|---|---|
 | **UT-A1** | `//` (`__floordiv__`) performs **true** division, not floor: `(u*7)//2 → 3.5` | **correctness** | **binding aliases the wrong op**: the `__floordiv__` pybind lambda calls `self.Div(rhs)` (`:1223`) — the very same op as `__truediv__` — so `//` never floors. Py probe *"`//` (__floordiv__) performs TRUE division … yields 3.5 …"* + *"`//` with a UniTensor divisor is also true division …"* + *"`//=` … is likewise true division in place …"* | **fix or remove**: either implement floor semantics for `//` (round toward −∞ after the divide), **or remove `__floordiv__`/`__rfloordiv__`/`__ifloordiv__` entirely** — do **not** silently route `//` to true division. A `DeprecationWarning` shim documents the change. |
 | **UT-A2** | `%` (`__mod__`/`__rmod__`) is **absent** from Python though C++ has `linalg::Mod`/`operator%` for UniTensor | **binding gap / C++-only** | **binding commented out**: the `__mod__`/`__rmod__` block is disabled in pybind (`:1311-1362`), so `hasattr(UniTensor,"__mod__")` is False and `u % 2` raises `TypeError`. On the C++ side the scalar forms `operator%(UniTensor, scalar)` / `Mod(UniTensor, scalar)` are **implemented** (Dense), while `Mod(UniTensor, UniTensor)` is an **unfinished stub** — its body is `cytnx_error_msg(true,"[Mod][Developing]")` (`Mod.cpp:1029`). Py probe *"`%` is absent … hasattr(UniTensor, '__mod__') is False"* + *"using `%` … raises TypeError …"*; **C++ probe confirms** `A % 2.0` and `Mod(A, 2.0)` compute `7 % 2 == 1`, while `Mod(A, B)` throws `[Mod][Developing]` | **bind `%`/`__mod__` for the working scalar case** (mirrors `linalg::Mod(UniTensor, scalar)`); **or document the absence** if `%` on tensors is out of scope. The tensor⊗tensor form additionally needs the C++ `Mod` stub finished before it can be bound. |
-| **UT-A3** | `Conj`/`Conj_`, `Trace`/`Trace_`, `Norm`, `Pow`/`Pow_`, `Transpose`/`Transpose_`, `Dagger`/`Dagger_` are **Capitalized members** | naming (N-casing) | **Capitalized member spellings**: every one is `.def`-ed with an initial capital (`:1367-1413`), violating the members-are-lowercase rule. The **same names also exist as `linalg` free functions** (`Conj`/`Trace`/`Norm`/`Pow`/`Inv`), which **stay Capitalized** (they act on objects — cat 08). `normalize`/`normalize_` are already correct. Py probe *"capitalized member `Conj` exists … (N-casing: should be lowercase)"* (one per name) + *"the capitalized names ALSO exist as `linalg` FREE functions …"* + *"`Norm()` returns a cytnx.Tensor …"* | **rename to lowercase**: `Conj`→`conj`, `Trace`→`trace`, `Norm`→`norm`, `Pow`→`pow`, `Transpose`→`transpose`, `Dagger`→`dagger` (and their `_` forms). Keep the free-function `linalg.Conj`/… Capitalized (cross-ref cat 08). *Migration:* keep each old Capitalized member as a `DeprecationWarning` alias for one minor release, then delete. |
+| **UT-A3** | `Conj`/`Conj_`, `Trace`/`Trace_`, `Norm`, `Pow`/`Pow_`, `Transpose`/`Transpose_`, `Dagger`/`Dagger_` are **Capitalized members** | naming (N-casing) | **Capitalized member spellings**: every one is `.def`-ed with an initial capital (`:1367-1413`), violating the members-are-lowercase rule. The **same names also exist as `linalg` free functions** (`Conj`/`Trace`/`Norm`/`Pow`), which **stay Capitalized** (they act on objects — cat 08). `normalize`/`normalize_` are already correct. The fifth free function in this family, `linalg.Inv`, is instead **renamed `Reciprocal`** to disambiguate from the matrix inverse `InvM` (cat 08 UT-X4) — see UT-A5 for the matching member-side rename `Inv`→`reciprocal`. Py probe *"capitalized member `Conj` exists … (N-casing: should be lowercase)"* (one per name) + *"the capitalized names ALSO exist as `linalg` FREE functions …"* + *"`Norm()` returns a cytnx.Tensor …"* | **rename to lowercase**: `Conj`→`conj`, `Trace`→`trace`, `Norm`→`norm`, `Pow`→`pow`, `Transpose`→`transpose`, `Dagger`→`dagger` (and their `_` forms). Keep the free-function `linalg.Conj`/… Capitalized (cross-ref cat 08). *Migration:* keep each old Capitalized member as a `DeprecationWarning` alias for one minor release, then delete. |
 | **UT-A4** | the in-place `Conj_`/`Trace_`/`Transpose_`/`Dagger_`/`normalize_`/`Pow_`/`__ipow__` are **conti.py wrappers over leaked raw `c*` bindings** | naming + **binding fidelity** | **binding exposes plumbing + wraps it**: raw C++ `Conj_`/`Trace_`/… are bound as `cConj_`/`cTrace_`/`cTranspose_`/`cDagger_`/`cnormalize_`/`cPow_`/`c__ipow__` (`:1366-1412`), and `cytnx/UniTensor_conti.py:128-170` defines each public in-place form as `self.c<Name>(); return self`. The `c`-prefix is a reserved raw-binding spelling (§R.0 rejects it). Py probe *"Conj_() returns self (in place)"* (etc.) + *"the raw plumbing binding `cConj_` LEAKS into public dir(UniTensor) …"* (one per name); **C++ probe confirms** C++ `Conj_()`/`Trace_(0,1)`/`Pow_(2.0)` (and `Transpose_`/`Dagger_`/`normalize_`) each return `&*this` | **remove the `c*` bindings from the public API** (bind under a leading `_` or inline into the pybind lambda) and have the in-place pybind lambda **return self directly** — dropping the conti.py `return self` shims (migration note). |
-| **UT-A5** | `Inv` (pure) exists but there is **no public `Inv_`** — only the leaked raw `cInv_` | **redundancy / gap** | **binding exposes only the raw in-place form**: `Inv` is public (`:1374`) but the in-place inverse is bound solely as `cInv_` (`:1370`) — `hasattr(UniTensor,"Inv_")` is False. C++ has `UniTensor &Inv_(double clip)` (`hpp:533`). Py probe *"there is NO public in-place `Inv_` — only the leaked raw `cInv_` …"*; **C++ probe confirms** C++ `Inv_()` inverts in place (`4 → 0.25`) and returns `&*this` | **add a public `inv_`** (lowercase per UT-A3) that returns self, backed by the C++ `Inv_`; **remove `cInv_`** from the public API (migration note). |
+| **UT-A5** | `Inv` (pure) exists but there is **no public `Inv_`** — only the leaked raw `cInv_` | **redundancy / gap** | **binding exposes only the raw in-place form**: `Inv` is public (`:1374`) but the in-place inverse is bound solely as `cInv_` (`:1370`) — `hasattr(UniTensor,"Inv_")` is False. C++ has `UniTensor &Inv_(double clip)` (`hpp:533`). Py probe *"there is NO public in-place `Inv_` — only the leaked raw `cInv_` …"*; **C++ probe confirms** C++ `Inv_()` inverts in place (`4 → 0.25`) and returns `&*this` | **rename to lowercase `reciprocal`** and **add a public `reciprocal_`** that returns self, backed by the C++ `Inv_`; **remove `cInv_`** from the public API (migration note). The member rename unifies with the free-function disambiguation `linalg.Inv`→`Reciprocal` (cross-ref cat 08 UT-X4) — one name per concept, cased by kind (member lowercase, free Capitalized). |
 | **UT-A6** | the named arithmetic methods `Add`/`Sub`/`Mul`/`Div` (and `Add_`/`Sub_`/`Mul_`/`Div_`) are **C++-only** — unbound as Python members | **binding fidelity / C++-only** | **binding hides the methods behind the operators**: the C++ `Add`/`Sub`/`Mul`/`Div` methods (`hpp:4928-5030`) are absent from `dir(UniTensor)`; only the operator dunders are exposed (they call `linalg::Add`/… `:780,1087`). Py probe *"named method `Add` is NOT a public Python member …"* (one per name) + *"operator dunder `__add__` is bound"* (one per dunder) | **keep the operators as the Python surface**; the named element-wise functions belong in `cytnx.linalg` (Capitalized, cat 08). Document the operator↔free-function equivalence; no separate `Add`/… Python member. |
 | **UT-A7** | in-place operators (`__iadd__`/`__isub__`/`__imul__`/`__itruediv__`/`__ifloordiv__`) mutate the receiver but the binding returns a **new wrapper** (identity dropped); `__pos__` returns a **shared-data** handle | **binding fidelity** (N2/B1) | **binding returns by value**: the augmented-assign lambdas return the `UniTensor&` from `Add_`/… by value (`:861,963,…`), so `a += x` mutates in place yet `a is not (the original handle)` afterwards (same pattern as `twist_`/UT-S7); `__pos__` is `return self` by value (`:779`), a shared-data wrapper. `__neg__` routes to `Mul(-1)` (`:765-777`). Py probe *"`__iadd__` mutates the receiver in place … but the binding returns a NEW wrapper — identity is dropped …"* + *"`__pos__` returns the tensor unchanged, SHARING data …"* + *"`__neg__` negates element-wise (routes to Mul(-1)) …"* | **keep**; **have the augmented-assign lambdas return `self` directly** (`return &self.Add_(rhs)`) so `a += x` preserves identity, matching Python's data-model contract for `__iadd__`. |
 
@@ -135,15 +135,15 @@ selectors for trace); there is no keyword-only metadata block.
 | `__add__`/`__sub__`/`__mul__`/`__truediv__`/`__floordiv__` (+ `r`/`i` forms) | `rhs` (UniTensor or scalar) |
 | `__neg__` / `__pos__` | *(none)* |
 | `__pow__` / `__ipow__` / `Pow` / `Pow_` | `p` (exponent) |
-| `Inv` (→ `inv`) / `inv_` | *(optional)* `clip` |
+| `Inv` (→ `reciprocal`) / `reciprocal_` | *(optional)* `clip` |
 | `Conj`/`Conj_` / `Transpose`/`Transpose_` / `Dagger`/`Dagger_` / `normalize`/`normalize_` / `Norm` | *(none)* |
 | `Trace` / `Trace_` | `a` (leg), `b` (leg) — default `(0, 1)` for the int overload |
 
 - **Canonical positional rule (§R.0):** the sole operand/parameter is positional;
   this matches the live order and needs no change. `Trace(a=0, b=1)` keeps its
   numpy-like default leg pair.
-- **`clip` on `Inv`/`inv_`** is an operation parameter (the small-value guard),
-  positional-optional with default `-1`.
+- **`clip` on `Inv`→`reciprocal`/`reciprocal_`** is an operation parameter (the
+  small-value guard), positional-optional with default `-1`.
 - **No metadata block:** none of these methods take the keyword-only
   `labels, rowrank, …` block used by the generators (cat 02).
 
@@ -160,13 +160,19 @@ Implement Cytnx to match it.*
   snake_case. The offenders are the Capitalized `Conj`/`Trace`/`Norm`/`Pow`/
   `Transpose`/`Dagger` (and their `_` forms) → `conj`/`trace`/`norm`/`pow`/
   `transpose`/`dagger` (UT-A3). The **free** functions `linalg.Conj`/`Trace`/
-  `Norm`/`Pow`/`Inv` **stay Capitalized** — they act on objects (cat 08).
-  `normalize`/`normalize_` are already conformant.
+  `Norm`/`Pow` **stay Capitalized** — they act on objects (cat 08). The fifth
+  member of this family, `Inv`, is **renamed `reciprocal`/`reciprocal_`**
+  instead of just being lowercased: cat 08 (UT-X4) renames the corresponding
+  free function `linalg.Inv`→`Reciprocal` to disambiguate it from the matrix
+  inverse `InvM`, so the member side follows suit for **one name per concept**
+  — `Reciprocal` (free, Capitalized) / `reciprocal` (member, lowercase) — per
+  the N-casing rule (UT-A5). `normalize`/`normalize_` are already conformant.
 - **N-underscore — a trailing `_` marks in-place (returns `self`); its absence
   marks pure (returns a new object).** Every element-wise op with both modes
   provides both forms: `conj`/`conj_`, `trace`/`trace_`, `transpose`/
   `transpose_`, `dagger`/`dagger_`, `pow`/`pow_`, `normalize`/`normalize_`, and
-  the **newly added `inv`/`inv_`** (UT-A5). The **`c`-prefixed raw spellings
+  the **newly added `reciprocal`/`reciprocal_`** (renamed from `Inv`, UT-A5;
+  cross-ref cat 08 UT-X4). The **`c`-prefixed raw spellings
   (`cConj_`, `cTrace_`, `cPow_`, `cTranspose_`, `cDagger_`, `cnormalize_`,
   `cInv_`, `c__ipow__`) are rejected** as public API — they are the plumbing the
   wrappers call (UT-A4/A5).
@@ -215,9 +221,9 @@ class UniTensor:
     def pow(self, p: float) -> "UniTensor": ...        # renamed from Pow
     def pow_(self, p: float) -> "UniTensor": ...       # renamed from Pow_; self
 
-    # --- element-wise inverse (pure + NEW in-place) ---
-    def inv(self, clip: float = -1) -> "UniTensor": ...   # renamed from Inv
-    def inv_(self, clip: float = -1) -> "UniTensor": ...  # NEW public in-place (was only cInv_); self
+    # --- element-wise reciprocal (pure + NEW in-place) ---
+    def reciprocal(self, clip: float = -1) -> "UniTensor": ...   # renamed from Inv (disambiguates from linalg.InvM; cross-ref cat08 UT-X4)
+    def reciprocal_(self, clip: float = -1) -> "UniTensor": ...  # NEW public in-place (was only cInv_); self
 
     # --- conjugate / transpose / adjoint (pure + in-place) ---
     def conj(self) -> "UniTensor": ...          # renamed from Conj
@@ -256,7 +262,7 @@ the operators.
 | `__mod__` / `__rmod__` | **add** (UT-A2) | NEW: element-wise modulo for a scalar rhs, backed by `linalg::Mod(UniTensor, scalar)`. *Migration:* uncomment/repair the pybind block; tensor⊗tensor awaits the C++ `Mod` stub being finished. |
 | `Pow` → `pow` | **rename** (UT-A3) | Pure element-wise power. *Migration:* `DeprecationWarning` alias `Pow` for one release. |
 | `Pow_` → `pow_` | **rename, bind self directly** (UT-A3/A4) | In-place power; returns self. *Migration:* remove the conti.py shim over `cPow_`; alias `Pow_` for one release. |
-| `Inv` → `inv` | **rename** (UT-A3) | Pure element-wise inverse (`1/x`, `clip`-guarded). *Migration:* alias `Inv` for one release. |
+| `Inv` → `reciprocal` | **rename (disambiguate from `InvM`)** (UT-A5; cross-ref cat 08 UT-X4) | Pure element-wise reciprocal (`1/x`, `clip`-guarded); unifies with the free-function rename `linalg.Inv`→`Reciprocal` (cat 08 UT-X4) — one name per concept, member lowercase / free Capitalized. *Migration:* alias `Inv` for one release. |
 | `Conj` → `conj` | **rename** (UT-A3) | Pure complex conjugate. *Migration:* alias `Conj`. |
 | `Conj_` → `conj_` | **rename, bind self directly** (UT-A3/A4) | In-place conjugate; returns self. *Migration:* remove the `cConj_` shim; alias `Conj_`. |
 | `Transpose` → `transpose` | **rename** (UT-A3) | Pure transpose (bra↔ket). *Migration:* alias `Transpose`. |
@@ -268,7 +274,7 @@ the operators.
 | `Trace` → `trace` | **rename** (UT-A3) | Pure trace over legs `a`,`b`. *Migration:* alias `Trace`. |
 | `Trace_` → `trace_` | **rename, bind self directly** (UT-A3/A4) | In-place trace; returns self. *Migration:* remove the `cTrace_` shim; alias `Trace_`. |
 | `Norm` → `norm` | **rename** (UT-A3) | Returns the 2-norm as a scalar `Tensor`. *Migration:* alias `Norm`. |
-| `inv_` | **add** (UT-A5) | NEW public in-place inverse (was only the leaked `cInv_`); returns self, backed by C++ `Inv_`. |
+| `reciprocal_` | **add** (UT-A5) | NEW public in-place reciprocal (was only the leaked `cInv_`); returns self, backed by C++ `Inv_`. |
 
 **C++-only — the operator implementations (no separate Python member).** The
 named arithmetic methods below exist in C++ and are reached from Python only
@@ -292,7 +298,7 @@ they are not public surface.
 | `cTrace_` | **remove** (UT-A4) | Raw plumbing (C++ `Trace_`) behind `Trace_`. *Migration:* fold into the `trace_` lambda. |
 | `cTranspose_` | **remove** (UT-A4) | Raw plumbing (C++ `Transpose_`) behind `Transpose_`. *Migration:* fold into the `transpose_` lambda. |
 | `cnormalize_` | **remove** (UT-A4) | Raw plumbing (C++ `normalize_`) behind `normalize_`. *Migration:* fold into the `normalize_` lambda. |
-| `cInv_` | **remove** (UT-A5) | Raw plumbing (C++ `Inv_`); the new public `inv_` replaces it. *Migration:* fold into the `inv_` lambda; no public exposure. |
+| `cInv_` | **remove** (UT-A5) | Raw plumbing (C++ `Inv_`); the new public `reciprocal_` replaces it. *Migration:* fold into the `reciprocal_` lambda; no public exposure. |
 | `c__ipow__` | **remove** (UT-A4) | Raw plumbing (C++ `Pow_`) behind `__ipow__`. *Migration:* fold into the `__ipow__` lambda (returns self). |
 
 ## R.2 Docstrings (normative)
@@ -362,16 +368,17 @@ longer route through the leaked raw `cPow_`/`c__ipow__` bindings (finding UT-A4)
 `Pow`/`Pow_` remain `DeprecationWarning` aliases for one release.
 ```
 
-### `inv` / `inv_`
+### `reciprocal` / `reciprocal_`
 
 ```
-UniTensor.inv(clip=-1)    -> UniTensor    # pure element-wise inverse (renamed from Inv)
-UniTensor.inv_(clip=-1)   -> UniTensor    # in-place, self (NEW)
+UniTensor.reciprocal(clip=-1)    -> UniTensor    # pure element-wise reciprocal (renamed from Inv)
+UniTensor.reciprocal_(clip=-1)   -> UniTensor    # in-place, self (NEW)
 
 Element-wise reciprocal (1/x) of this UniTensor.
 
-`inv` is PURE and returns a new tensor; `inv_` inverts IN PLACE and returns self
-(finding UT-A5 — 1.1.0 had no public in-place form, only the leaked `cInv_`).
+`reciprocal` is PURE and returns a new tensor; `reciprocal_` inverts IN PLACE
+and returns self (finding UT-A5 — 1.1.0 had no public in-place form, only the
+leaked `cInv_`).
 
 Parameters
 ----------
@@ -382,13 +389,16 @@ clip : float, optional
 Returns
 -------
 UniTensor
-    `inv`: a new tensor. `inv_`: self.
+    `reciprocal`: a new tensor. `reciprocal_`: self.
 
 Notes
 -----
-Renamed from the Capitalized `Inv` (finding UT-A3); `inv_` is newly added public
-in-place (finding UT-A5). `Inv` remains a `DeprecationWarning` alias for one
-release.
+Renamed from the Capitalized `Inv` (finding UT-A5), not just lowercased: the
+new name unifies with the free-function disambiguation `linalg.Inv`→
+`Reciprocal` (cross-ref cat 08 UT-X4), giving the concept one name per kind —
+`Reciprocal` (free) / `reciprocal` (member). `reciprocal_` is newly added
+public in-place (finding UT-A5). `Inv`/`Inv_` remain `DeprecationWarning`
+aliases for one release.
 ```
 
 ### `conj` / `conj_` / `transpose` / `transpose_` / `dagger` / `dagger_`
@@ -464,10 +474,13 @@ Old Capitalized names remain `DeprecationWarning` aliases for one release.
 C++ already returns `UniTensor&`/`UniTensor`/`Tensor` per the N-underscore split;
 the next version must have the *pybind lambdas* return these directly (removing
 the conti.py shims and the leaked `c*` bindings, UT-A4/A5), wire `//` to floor
-(or drop it, UT-A1), bind `%` for the scalar case (UT-A2), add a public `inv_`
-(UT-A5), and have the augmented-assign operators return `self` (UT-A7). The
-member names are lowercased in the Python binding while the C++ method names and
-the `linalg` free functions keep their capitalization (cat 08).
+(or drop it, UT-A1), bind `%` for the scalar case (UT-A2), add a public
+`reciprocal_` (renamed from `Inv`/`inv_`, UT-A5), and have the augmented-assign
+operators return `self` (UT-A7). The member names are lowercased in the Python
+binding (with `Inv` additionally renamed `reciprocal` to disambiguate from
+`linalg.InvM`, cross-ref cat 08 UT-X4) while the C++ method names keep their
+capitalization; the `linalg` free functions likewise keep Capitalized names,
+with `Inv`→`Reciprocal` renamed in step (cat 08).
 
 ```cpp
 /**
@@ -487,7 +500,10 @@ UniTensor &Pow_(const double &p);
  * @brief Element-wise reciprocal (1/x), pure and in-place.
  * @details Inv(clip) returns a NEW UniTensor; Inv_(clip) inverts in place and
  *          returns *this. `clip` guards small magnitudes. The Python binding
- *          exposes inv/inv_ — 1.1.0 lacked a public in-place inv_, exposing only
+ *          exposes reciprocal/reciprocal_ — renamed from Inv/Inv_ (not merely
+ *          lowercased) to disambiguate from the matrix inverse InvM, matching
+ *          the free-function rename linalg.Inv->Reciprocal (cross-ref cat08
+ *          UT-X4). 1.1.0 lacked a public in-place reciprocal_, exposing only
  *          the leaked raw cInv_ (finding UT-A5).
  * @param clip small-magnitude guard (-1 = none).
  * @return Inv: a new UniTensor. Inv_: reference to *this.
