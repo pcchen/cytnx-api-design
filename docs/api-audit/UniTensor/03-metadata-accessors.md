@@ -82,8 +82,8 @@ Status: `identical` · `renamed` · `signature-differs` · `C++-only` · `Python
 | `same_data(rhs) const` | `same_data(arg0)` | identical | arg name erased to `arg0` (UT-M5) |
 | `elem_exists(locator) const` | `elem_exists(arg0)` | identical | arg name erased (UT-M5) |
 | `get_qindices(bidx) const` (`:1606`) | `get_qindices(arg0)` | identical | arg name erased (UT-M5) |
-| `getTotalQnums(physical=false)` (`:4745`, *"@note This API just have not support"*) | `getTotalQnums(physical=False)` | renamed→snake | camelCase; **non-functional** (UT-M2/UT-M6) |
-| `get_blocks_qnums() const` (`:4752`, same *"not support"* note) | `get_blocks_qnums()` | identical | already snake; **non-functional** (UT-M6) |
+| `getTotalQnums(physical=false)` (`:4745`, *"@note This API just have not support"* at `:4743`) | `getTotalQnums(physical=False)` | identical | name kept verbatim (camelCase) in 1.1.0; snake_case rename (`get_total_qnums`) is recommended in §R only (UT-M2/UT-M6) |
+| `get_blocks_qnums() const` (`:4752`, same *"not support"* note at `:4750`) | `get_blocks_qnums()` | identical | already snake; **non-functional** (UT-M6) |
 
 ## A3. Findings
 
@@ -92,9 +92,12 @@ fidelity)** finding would flag where the binding layer changes behavior versus
 the raw C++ method — this category has **none**: every accessor is a thin
 `.def(&UniTensor::…)` (or a trivial forwarding lambda) that returns exactly what
 the C++ method returns, and the two "not supported" methods raise because the
-*C++* methods raise (`hpp:4735-4754` + the base not-implemented at
-`UniTensor_base.cpp:499,504`), not because of any binding transform. The
-`bonds()` copy-vs-`&` gap (A2) is a signature choice, not a behavior divergence.
+*C++* methods raise (`hpp:4735-4754`): on a **Dense** tensor, `DenseUniTensor`
+itself raises *"can only operate on UniTensor with symmetry"*
+(`UniTensor.hpp:807,813`); on a **Block** tensor, the call falls through to the
+un-initialized `UniTensor_base` (`UniTensor_base.cpp:499,504`) — not because of
+any binding transform. The `bonds()` copy-vs-`&` gap (A2) is a signature
+choice, not a behavior divergence.
 **Gate 4 (C++ probe) is therefore skipped for category 03.**
 
 | ID | Finding | Type | What the binding does · evidence | Recommendation |
@@ -103,8 +106,8 @@ the C++ method returns, and the two "not supported" methods raise because the
 | **UT-M2** | `getTotalQnums` is camelCase | naming (N-casing) | **thin pass-through** — `.def("getTotalQnums", …)` (`:760`) keeps the C++ name | **rename** → `get_total_qnums` |
 | **UT-M3** | `bonds()` returns a **copied container** whose `Bond` elements still **share** the parent's impl | copy/view (B2) | **binding copies the vector by value** (`:491`); the copied list can't resize the parent's leg set (unlike the C++ non-const `&`), but a leg mutated *in place* through it reaches the parent. Probe: *"bonds() copies the list but its Bond elements share the parent's impl"* | document the two-level semantics; recommend a `bonds()` that yields per-leg copies (use `bond_(i)` for a deliberate view) |
 | **UT-M4** | `bond` (copy) / `bond_` (view) is a correctly-formed N-underscore pair | naming (N-underscore) — **conformant** | **thin pass-through** — `bond` clones (`hpp:3151`), `bond_` returns a shared shell (`hpp:127`). Probe: *"bond_(i) is a VIEW …"* / *"bond(i) is a COPY …"* | **keep both** — canonical view/copy pair; document the split |
-| **UT-M5** | `same_data`/`elem_exists`/`get_qindices`/`get_index` erase their argument name to `arg0` | naming (parameter consistency, PC1) | **binding drops the `py::arg`** — `.def("same_data", &UniTensor::same_data)` (`:489`), `elem_exists` (`:347`), `get_qindices` (`:1606`) register no `py::arg(...)`, so the parameter is positional-only. Probe: *"same_data(rhs=…) is REJECTED"*, *"elem_exists(locator=…) is REJECTED"*, *"get_qindices(bidx=…) is REJECTED"* | add real `py::arg` names (`other`, `locator`, `bond_idx`, `label`) |
-| **UT-M6** | `getTotalQnums`/`get_blocks_qnums` are advertised yet **raise on every tensor type** | correctness / documentation | **thin pass-through to a broken C++ method** — the C++ header marks both *"@note This API just have not support"* (`hpp:4742,4751`); Dense raises *"can only operate on UniTensor with symmetry"* and Block falls to the not-implemented base (`UniTensor_base.cpp:499,504`). Probe: *"getTotalQnums/get_blocks_qnums on a block/dense tensor RAISES …"* (4 assertions) | **implement** them for Block tensors (their documented domain) or **remove**; if kept, rename `getTotalQnums`→`get_total_qnums` (UT-M2) |
+| **UT-M5** | `same_data`/`elem_exists`/`get_qindices`/`get_index` erase their argument name to `arg0` | naming (parameter consistency, PC1) | **binding drops the `py::arg`** — `.def("same_data", &UniTensor::same_data)` (`:489`), `elem_exists` (`:347`), `get_qindices` (`:1606`), `get_index` (`:323`) register no `py::arg(...)`, so the parameter is positional-only. Probe: *"same_data(rhs=…) is REJECTED"*, *"elem_exists(locator=…) is REJECTED"*, *"get_qindices(bidx=…) is REJECTED"*, *"get_index(label=…) is REJECTED"* | add real `py::arg` names (`other`, `locator`, `bond_idx`, `label`) |
+| **UT-M6** | `getTotalQnums`/`get_blocks_qnums` are advertised yet **raise on every tensor type** | correctness / documentation | **thin pass-through to a broken C++ method** — the C++ header marks both *"@note This API just have not support"* (`hpp:4743,4750`); on **Dense**, `DenseUniTensor` itself raises *"can only operate on UniTensor with symmetry"* (`UniTensor.hpp:807,813`); on **Block**, the call falls through to the un-initialized `UniTensor_base` (`UniTensor_base.cpp:499,504`). Probe: *"getTotalQnums/get_blocks_qnums on a block/dense tensor RAISES …"* (4 assertions) | **implement** them for Block tensors (their documented domain) or **remove**; if kept, rename `getTotalQnums`→`get_total_qnums` (UT-M2) |
 | **UT-M7** | `signflip` is a BlockFermionic-only accessor that raises on bosonic tensors | documentation | **thin pass-through** — `.def("signflip", &UniTensor::signflip)` (`:497`); the base raises *"signflip is only defined for BlockFermionicUniTensor"* (`UniTensor_base.cpp:66`). Probe: *"signflip() returns list[bool] on a BlockFermionic tensor"* / *"… RAISES on a bosonic … block tensor"* | **keep**; document the fermionic-only precondition |
 
 ## A4. Argument ordering — positional & keyword

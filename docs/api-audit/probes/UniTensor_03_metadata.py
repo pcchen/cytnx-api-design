@@ -174,5 +174,7 @@ report("elem_exists's arg is erased to arg0 — elem_exists(locator=...) is REJE
        _rejects_kw(lambda: B.elem_exists(locator=[0, 0])))
 report("get_qindices's arg is erased to arg0 — get_qindices(bidx=...) is REJECTED (PC1)",
        _rejects_kw(lambda: B.get_qindices(bidx=0)))
+report("get_index's arg is erased to arg0 — get_index(label=...) is REJECTED (PC1/UT-M5)",
+       _rejects_kw(lambda: B.get_index(label="0")))
 
 print("UniTensor 03 probe ok")
