@@ -140,3 +140,40 @@ def test_cli_directory_smoke_check_on_real_unitensor_docs():
     # directory and reports a coverage line; it does not assert full PASS.
     r = run("UniTensor", os.path.join(REPO_ROOT, "docs", "api-audit", "UniTensor"))
     assert "covered" in (r.stdout + r.stderr), r.stdout + r.stderr
+
+
+# --- N-private accounting helpers (§4.4/§5.6/§10) --------------------------
+
+def test_looks_like_leak_patterns_and_c_prefix_of_existing_member():
+    m = {"normalize_", "tag", "truncate_", "contiguous", "clone"}
+    # c+Capital / c_ / c__ / *_different_* / make_contiguous
+    assert validate_doc._looks_like_leak("cConj_", m)
+    assert validate_doc._looks_like_leak("c_at", m)
+    assert validate_doc._looks_like_leak("c__ipow__", m)
+    assert validate_doc._looks_like_leak("astype_different_type", m)
+    assert validate_doc._looks_like_leak("make_contiguous", m)
+    # c+lowercase wrapper of an existing method (the ^c[A-Z] blind spot)
+    assert validate_doc._looks_like_leak("cnormalize_", m)   # normalize_ present
+    assert validate_doc._looks_like_leak("ctag", m)          # tag present
+    assert validate_doc._looks_like_leak("ctruncate_", m)    # truncate_ present
+    # legitimate members must NOT be flagged
+    assert not validate_doc._looks_like_leak("contiguous", m)   # tail 'ontiguous' not a member
+    assert not validate_doc._looks_like_leak("contiguous_", {"contiguous"})
+    assert not validate_doc._looks_like_leak("clone", m)
+
+
+def test_hide_members_parses_table_and_returns_none_when_absent(tmp_path):
+    d = tmp_path / "Fake"; d.mkdir()
+    # No private-surface.md → check is skipped (None), not empty set.
+    assert validate_doc._hide_members(str(d)) is None
+    (d / "private-surface.md").write_text(textwrap.dedent("""
+        # Fake — private / plumbing surface
+        ## Leaked internals — hide
+        | Member | What it is | Used by | Fix |
+        |---|---|---|---|
+        | `cFoo_` | raw | `Foo_` | inline |
+        | `c_bar` | raw | `bar` | inline |
+        ## User-facing dunders — keep
+        `__repr__`  (must NOT be parsed as a hide member)
+    """))
+    assert validate_doc._hide_members(str(d)) == {"cFoo_", "c_bar"}

@@ -79,6 +79,12 @@ def members_requiring_docstrings(rec_text):
     )
     required = set()
     for line in rec_text.splitlines():
+        # Verdicts live in the R.1 verdict *table*; a prose line that merely
+        # mentions a member in backticks and happens to contain a verdict word
+        # (e.g. "the leaked `cfrom` … (5) add the numpy export") must not be
+        # read as a verdict row.
+        if not line.strip().startswith("|"):
+            continue
         member = _row_member(line)
         if member is None:
             continue
@@ -99,6 +105,50 @@ def has_docstring(member, docstrings_text):
     if re.search(rf"^#{{1,6}}\s*.*\b{re.escape(member)}\b", docstrings_text, re.MULTILINE):
         return True
     return False
+
+
+def _looks_like_leak(m, allmembers):
+    """Heuristic: does a public (non-underscore) member name look like a raw
+    pybind binding / conti.py shim that should be private? (`cConj_`, `c_at`,
+    `c__ipow__`, `cnormalize_`, `make_contiguous`, `astype_different_type`, …).
+    The N-private completeness net: every such name must be declared in
+    private-surface.md.
+
+    Catches (a) the `c`+Capital / `c_` / `c__` raw-binding spellings, (b) the
+    `*_different_*` and `make_contiguous` shims, and (c) a `c`-prefixed wrapper
+    of an existing public method (`cnormalize_` ← `normalize_`) — the last is why
+    a bare `^c[A-Z]` regex under-counts, so it is checked against `allmembers`."""
+    if (re.match(r"^c[A-Z]", m) or m.startswith("c_") or m.startswith("c__")
+            or "_different_" in m or m == "make_contiguous"):
+        return True
+    return m.startswith("c") and len(m) > 1 and m[1:] in allmembers
+
+
+def _hide_members(path):
+    """The set of members in `<dir>/private-surface.md`'s "Leaked internals —
+    hide" table, or None if that file does not exist (N-private check skipped).
+
+    Parses the table rows under the `## Leaked internals` heading up to the next
+    heading, taking each row's API-cell member (see `_row_member`)."""
+    if not os.path.isdir(path):
+        return None
+    ps = os.path.join(path, "private-surface.md")
+    if not os.path.exists(ps):
+        return None
+    text = open(ps, encoding="utf-8").read()
+    m = re.search(r"^##\s+Leaked internals.*$", text, re.MULTILINE)
+    if not m:
+        return set()
+    section = text[m.end():]
+    section = re.split(r"^#{2,3}\s", section, maxsplit=1, flags=re.MULTILINE)[0]
+    hide = set()
+    for line in section.splitlines():
+        if not line.strip().startswith("|"):
+            continue
+        member = _row_member(line)
+        if member:
+            hide.add(member)
+    return hide
 
 
 def _docs(path):
@@ -155,9 +205,10 @@ def _validate_flat(unit, text):
     return problems, members
 
 
-def _validate_categorized(unit, doc_paths, texts):
+def _validate_categorized(unit, path, doc_paths, texts):
     """Categorized-layout checks: union coverage/docstrings across category
-    files. Returns (problems, members)."""
+    files, plus the N-private accounting gate when a private-surface.md exists.
+    Returns (problems, members, leaked_public_count | None)."""
     problems = []
     for p, t in zip(doc_paths, texts):
         for sec in CATEGORY_REQUIRED_SECTIONS:
@@ -177,7 +228,23 @@ def _validate_categorized(unit, doc_paths, texts):
         if not has_docstring(m, doc_sec):
             problems.append(f"missing docstring: {m}")
 
-    return problems, members
+    # N-private accounting gate (§4.4/§5.6/§10): only when private-surface.md exists.
+    leaked = None
+    hide = _hide_members(path)
+    if hide is not None:
+        dir_all = set(dir(UNIT_REGISTRY[unit]))
+        for m in sorted(hide - dir_all):  # no phantom hide
+            problems.append(f"N-private: private-surface.md hides `{m}` — not in dir({unit})")
+        for m in sorted(mm for mm in members if _looks_like_leak(mm, members)):  # completeness
+            if m not in hide:
+                problems.append(
+                    f"N-private: `{m}` looks like a leaked binding but is not in "
+                    "private-surface.md's hide table")
+        for m in sorted(hide & needs_doc):  # nothing both public and hidden
+            problems.append(f"N-private: `{m}` is both hidden and keep/add/rename")
+        leaked = len(hide & members)
+
+    return problems, members, leaked
 
 
 def main():
@@ -185,8 +252,9 @@ def main():
     doc_paths = _docs(path)
     texts = [open(p, encoding="utf-8").read() for p in doc_paths]
 
+    leaked = None
     if os.path.isdir(path):
-        problems, members = _validate_categorized(unit, doc_paths, texts)
+        problems, members, leaked = _validate_categorized(unit, path, doc_paths, texts)
         summary = f"PASS: {unit} — {len(members)} members covered across {len(doc_paths)} files"
     else:
         problems, members = _validate_flat(unit, texts[0])
@@ -198,6 +266,8 @@ def main():
             print("  -", p)
         sys.exit(1)
     print(summary)
+    if leaked is not None:
+        print(f"N-private leaked-public count: {unit} = {leaked}  (target 0)")
 
 
 if __name__ == "__main__":

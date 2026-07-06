@@ -253,38 +253,10 @@ conversion and deep-copy (plus `__copy__`/`__deepcopy__`, documented there).
 
 ## Internal / plumbing (not public API)
 
-These names are live members of `dir(cytnx.UniTensor)` but are **raw
-C++/pybind bindings that leak** into the public namespace — `c*`-prefixed
-in-place bindings, the `*_different_*` conversion shims, and the
-`make_contiguous` contiguity shim. Each sits *under* a public wrapper (usually a
-`*_conti.py` method); the public member is the supported API and the raw binding
-should be hidden (underscore-prefixed or removed) in the next version. Collected
-from every category's plumbing block.
-
-| Leaked binding | Category | Public wrapper it backs |
-|---|---|---|
-| `c_set_name` | 04 | `set_name` |
-| `c_set_label` | 04 | `set_label` |
-| `c_set_labels` | 04 | `set_labels` |
-| `c_relabel_` | 04 | `relabel_` |
-| `c_relabels_` | 04 | `relabels_` |
-| `c_set_rowrank_` | 04 | `set_rowrank_` |
-| `ctag` | 05 | `tag` |
-| `ctruncate_` | 05 | `truncate_` |
-| `make_contiguous` | 05 | `contiguous` / `contiguous_` |
-| `c_at` | 06 | `at` |
-| `cConj_` | 07 | `Conj_` |
-| `cDagger_` | 07 | `Dagger_` |
-| `cPow_` | 07 | `Pow_` |
-| `cTrace_` | 07 | `Trace_` |
-| `cTranspose_` | 07 | `Transpose_` |
-| `cnormalize_` | 07 | `normalize_` |
-| `cInv_` | 07 | (no public `Inv_` — raw only) |
-| `c__ipow__` | 07 | `__ipow__` |
-| `astype_different_type` | 12 | `astype` |
-| `to_different_device` | 12 | `to` / `to_` |
-| `cfrom` | 12 | `convert_from` |
-
-**Recommendation (cross-category):** hide all of the above (prefix `_` or drop
-the `.def` registration) so they no longer appear in `dir(cytnx.UniTensor)`; the
-public wrappers are the sole supported surface.
+The private/plumbing surface — the raw `c*`/shim bindings that leak into
+`dir(cytnx.UniTensor)` — is analyzed in full in
+[`private-surface.md`](private-surface.md): every leaked member classified with
+its public wrapper and hide fix (**21** leaked members today), the
+single-underscore internals, and the user-facing vs framework dunders. That
+document is the single home for the private surface, machine-enforced by the
+N-private accounting gate in `tools/validate_doc.py`.
