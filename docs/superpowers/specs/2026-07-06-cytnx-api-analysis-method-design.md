@@ -93,6 +93,34 @@ Self-contained; a Cytnx implementer codes to it directly.
   language's recommended signature. (A Python-only member such as `from_numpy`
   has no `R.2b` entry; a C++-only member has no `R.2a` entry.)
 
+### 4.3 `actionable-fixes.md` — the fix-now summary (cross-class)
+
+`docs/api-audit/actionable-fixes.md` is a cross-class deliverable that
+aggregates every finding a maintainer can fix **now**, independent of the API
+redesign — the immediately-shippable value of the audit. It is **derived**, not
+hand-curated: built by filtering the per-class `A3` findings tables to the
+actionable Types — `correctness`, `binding fidelity`, `capability gap`, and the
+unbound/commented-out-C++ rows — and **excluding** the redesign-only Types
+(`naming`, `redundancy`, `ordering`, and `copy/view`-documentation).
+
+One row per fix, ranked by severity:
+`| Severity | Bug / gap | Class · finding-id | Evidence | Recommended fix |`.
+
+- **Critical** — crash / silent-wrong result / data corruption (e.g. `Save`/`Load`
+  name over-read, `Network.Contract().Launch()` segfault, `//` true-division,
+  `qgates.hadamard` non-unitary, `Symmetry.check_qnums` rejecting valid qnums).
+- **High** — wrong-for-some-inputs, or the binding drops C++ functionality
+  (e.g. `normal_` returns `None`, `get_elem` binds 4 of 11 dtypes, broken
+  pickle, `astype`/`to` is-self short-circuit).
+- **Medium** — capability gaps: useful C++ unbound or commented out
+  (e.g. `Lanczos_ER`/`Gnd`/`Gnd_Ut`, missing `%`, no numpy bridge,
+  `combineBond` singular).
+
+Every row cites the probe assertion backing it (both-sides where a raw-C++
+probe exists) and the `file:line`, so a maintainer goes straight to the fix. A
+top **"Confirmed bugs"** section holds the Critical/High defects; a **"Gaps"**
+section holds the Medium items.
+
 ## 5. Normative conventions
 
 These are the rules `R.0` applies. Every Consistency-style finding cites one.
@@ -166,6 +194,11 @@ Python probe + (where built) raw-C++ probe. Examples from the pilot: a pybind
 lambda that drops C++'s reference return (UT-G5); a `py::arg` rename (UT-G3);
 Python-only sugar injected in the lambda (UT-G11).
 
+The Type field is also the **extraction filter** for `actionable-fixes.md`
+(§4.3): findings typed `correctness`, `binding fidelity`, or `capability gap`
+(plus unbound/commented-out C++) are the fix-now set; `naming`/`redundancy`/
+`ordering`/`copy-view`-documentation are redesign-only and excluded.
+
 ## 7. Verification model
 
 No behavioral claim ships unverified. Two runtime layers:
@@ -207,8 +240,11 @@ migration guide.
    plus `inventory.md` and `element-dtypes.md`.
 3. **Replicate per class** — `Tensor`, `Bond`, `Symmetry`, `Network`, `LinOp`,
    `Storage`, `Scalar`, enums, operations — each as a category set.
-4. **Cross-class layer** — a `cpp-python-mapping.md` policy and a master
-   recommendation index, refreshed from the per-category tables.
+4. **Cross-class layer** — a `cpp-python-mapping.md` policy, a master
+   recommendation index, and **`actionable-fixes.md`** (§4.3), all refreshed by
+   aggregating the per-category tables. `actionable-fixes.md` can be seeded
+   incrementally as each class lands (its rows already exist as typed `A3`
+   findings) and consolidated here.
 
 The v1 per-class docs remain as-is until a class is redone under this method;
 when redone, the v1 doc is superseded (notably reversing the linalg casing).
@@ -223,6 +259,10 @@ when redone, the v1 doc is superseded (notably reversing the linalg casing).
 - `R.1` gives exact recommended signatures; `R.2` a docstring per kept/added/
   renamed API.
 - Every rename/remove has a migration note.
+- Every `A3` finding typed `correctness`, `binding fidelity`, or `capability
+  gap` (or unbound/commented-out C++) appears as a row in `actionable-fixes.md`
+  (§4.3) with a severity and a concrete fix — nothing fixable is left only
+  inside a per-class doc.
 
 ## 11. Open decisions (to confirm at spec review)
 
