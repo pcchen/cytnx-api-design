@@ -121,6 +121,28 @@ probe exists) and the `file:line`, so a maintainer goes straight to the fix. A
 top **"Confirmed bugs"** section holds the Critical/High defects; a **"Gaps"**
 section holds the Medium items.
 
+### 4.4 `private-surface.md` — the private/plumbing surface (per class)
+
+`docs/api-audit/<Class>/private-surface.md` classifies **every** name in
+`dir(Class)` that is *not* part of the recommended public API, so the internal
+surface is audited systematically rather than category-by-category. It
+**subsumes** `inventory.md`'s Internal/plumbing section (which becomes a pointer
+to it) — one home for the private surface. Three buckets, each probe-backed
+(`member in dir(Class)`):
+
+- **Leaked internals → hide** — non-underscore and single-underscore members
+  that are raw pybind bindings or shims (UniTensor: the 17 `c*` / `*_different_*`
+  / `make_contiguous` + 5 `_at`/`_relabel_`/…). One row each:
+  `| Member | What it is | Used by (public wrapper) | Hide fix |`.
+- **User-facing dunders → keep** — the protocol dunders (`__getitem__`,
+  operators, `__repr__`, `__copy__`, …) already specced in the category docs;
+  listed for completeness, not re-audited.
+- **Framework defaults → ignore** — the universal Python/pybind dunders
+  (`__reduce__`, `__init_subclass__`, `__getattribute__`, …); noted once as
+  excluded-by-rule, not enumerated per-member.
+
+Non-numbered → excluded from the coverage-validator glob.
+
 ## 5. Normative conventions
 
 These are the rules `R.0` applies. Every Consistency-style finding cites one.
@@ -180,6 +202,17 @@ the `returns_view` probe pattern.
 Semantically equivalent parameters share one name across sibling APIs
 (`labels` not `in_labels`; `qnum`/`qnums`; `dtype`/`device`).
 
+### 5.6 N-private — nothing internal is public
+
+Every symbol not in the recommended public API is private: a leading `_` or a
+private submodule. A pybind binding that exists *only* for a `*_conti.py`
+wrapper to call is **inlined into the pybind lambda** (so the `c*` name
+disappears) or bound under `_`. The universal framework dunders (`__reduce__`,
+`__class__`, …) are accepted as-is. Enforced by the accounting gate (§10); the
+redesign target — `dir(Class)` non-underscore == the recommended public API — is
+tracked as a per-class metric (leaked-public count, target 0), a hard gate only
+against a redesigned build.
+
 ## 6. Finding taxonomy
 
 Each A3 finding has a **Type**. Most are standard (naming, ordering, redundancy,
@@ -198,6 +231,10 @@ The Type field is also the **extraction filter** for `actionable-fixes.md`
 (§4.3): findings typed `correctness`, `binding fidelity`, or `capability gap`
 (plus unbound/commented-out C++) are the fix-now set; `naming`/`redundancy`/
 `ordering`/`copy-view`-documentation are redesign-only and excluded.
+
+Leaked-binding findings (raw `c*`/shim members exposed in `dir()`) are the
+**hide** set: consolidated in `private-surface.md` (§4.4) and enforced by the
+N-private accounting gate (§10).
 
 ## 7. Verification model
 
@@ -263,6 +300,12 @@ when redone, the v1 doc is superseded (notably reversing the linalg casing).
   gap` (or unbound/commented-out C++) appears as a row in `actionable-fixes.md`
   (§4.3) with a severity and a concrete fix — nothing fixable is left only
   inside a per-class doc.
+- **N-private accounting (machine-checked by `validate_doc.py`):** every
+  non-underscore `dir(Class)` member is exactly one of a recommended-public name
+  (`keep`/`add`/`rename`) or a `hide` entry in `private-surface.md` — nothing
+  unaccounted, nothing both. The validator also prints the per-class
+  **leaked-public count** (the `hide`-set size), the N-private redesign metric
+  (§5.6; target 0, a hard gate only against a redesigned build).
 
 ## 11. Open decisions (to confirm at spec review)
 
