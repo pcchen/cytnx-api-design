@@ -171,6 +171,13 @@ report("the C++ named arithmetic methods (Add/Sub/Mul/Div + their _ forms, "
 for dunder in ("__add__", "__sub__", "__mul__", "__truediv__"):
     report(f"operator dunder `{dunder}` IS bound (the operator surface)",
            hasattr(Tensor, dunder))
+report("T-A6: __pow__ dunder is bound (pure ** operator)",
+       hasattr(cytnx.Tensor, "__pow__"))
+pt = _dbl(1, 2, 3)
+report("T-A6: pure `**` (__pow__) squares element-wise into a new tensor "
+       "(1,2,3 -> 1,4,9), source unchanged",
+       (pt ** 2) is not pt and _v(pt ** 2) == [1.0, 4.0, 9.0]
+       and _v(pt) == [1.0, 2.0, 3.0])
 
 # =========================================================================
 # T-A7: the in-place operators __iadd__/__isub__/__imul__/__itruediv__/

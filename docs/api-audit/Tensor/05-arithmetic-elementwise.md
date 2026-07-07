@@ -87,7 +87,10 @@ member binding — only the operators exist"*.
 
 ## A2. C++ ↔ Python mapping
 
-Status: `identical` · `renamed` · `signature-differs` · `C++-only` · `leak`.
+Status: `identical` · `renamed` · `signature-differs` · `C++-only` · `leak`. A
+binding that faithfully mirrors the C++ signature — including `void`→`None`,
+`T&`→self, and by-value→a fresh wrapper — is `identical`; `signature-differs`
+marks a binding-layer change to arity or defaults.
 
 | C++ (`Tensor.hpp` / `linalg.hpp`) | Python | Status | Note |
 |---|---|---|---|
@@ -96,7 +99,7 @@ Status: `identical` · `renamed` · `signature-differs` · `C++-only` · `leak`.
 | `Tensor Div(const T&)` (`hpp:1332`) | `__floordiv__` (`:1329-1355`, calls `Div`) | **binding fidelity** | `//` wired to true division — a correctness bug (T-A1) |
 | `Tensor Mod(const T&)` (`hpp:1397`) | `__mod__` (`:1566`), `__rmod__` (`:1634`) | identical | `%` bound and fully working for scalar+tensor (T-A8; contrast UniTensor UT-A2) |
 | `Tensor operator-()` → `Mul(-1)` (`hpp:1407`) | `__neg__` (`:436-449`) | identical | element-wise negation (T-A7) |
-| `return *this` by value | `__pos__` (`:450`) | **signature-differs** | returns a distinct, shared-data wrapper (T-A7) |
+| `return *this` by value | `__pos__` (`:450`) | identical | returns a distinct, shared-data wrapper (T-A7) |
 | `linalg::Pow(Tensor,double)` | `__pow__` (`:1769`), `Pow` (`:1791`) | identical | pure power (T-A3) |
 | `linalg::Pow_(Tensor&,double)` / `Tensor &Pow_(double)` (`hpp:1696`) | `c__ipow__` (`:1771`), `cPow_` (`:1792`) **+** conti.py `__ipow__`/`Pow_` (`:112-120`) | **leak** | raw in-place power bound as `c__ipow__`/`cPow_`; public forms wrap them (T-A4) |
 | `linalg::Dot(Tensor,Tensor)` (`linalg.hpp:2482`) | `__matmul__` (`:1773`) | identical | pure matrix product (T-A2) |

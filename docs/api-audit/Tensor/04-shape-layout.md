@@ -58,6 +58,9 @@ SHARES storage …"*.
 ## A2. C++ ↔ Python mapping
 
 Status: `identical` · `renamed` · `signature-differs` · `C++-only` · `Python-only`.
+A binding that faithfully mirrors the C++ signature — including `void`→`None`,
+`T&`→self, and by-value→a fresh wrapper — is `identical`; `signature-differs`
+marks a binding-layer change to arity or defaults.
 
 | C++ (`Tensor.hpp`) | Python | Status | Note |
 |---|---|---|---|
@@ -66,7 +69,7 @@ Status: `identical` · `renamed` · `signature-differs` · `C++-only` · `Python
 | `Tensor reshape(const std::vector<cytnx_int64>&) const` (`:845`) | `reshape(*args)` (lambda `:199-203`) | **signature-differs** | pure, shared-data view; `(*args)` erasure (T-S1/T-S3) |
 | `Tensor &reshape_(const std::vector<cytnx_int64>&)` (`:798`) | `reshape_(*args)` (lambda `:194-198`) | **signature-differs** | lambda returns `&self.reshape_(...)` → self; `(*args)` erasure (T-S2/T-S3) |
 | `Tensor contiguous() const` (`:752`) | `make_contiguous` **+** conti.py `contiguous` | **leak** | raw C++ `contiguous()` bound as `make_contiguous` (`:192`); public `contiguous` is a conti.py short-circuit wrapper (T-S4/T-S8) |
-| `Tensor contiguous_()` (`:772`, **returns `*this` by value**) | `contiguous_()` (`:193`) | **signature-differs** | bound as a plain method pointer; the by-value C++ return means Python gets a shared-data wrapper, **not** self (T-S5) |
+| `Tensor contiguous_()` (`:772`, **returns `*this` by value**) | `contiguous_()` (`:193`) | identical | bound as a plain method pointer; the by-value C++ return means Python gets a shared-data wrapper, **not** self (T-S5) |
 | `Tensor flatten() const` (`:1416`) | `flatten()` (`:190`) | identical | pure, independent 1-D copy (T-S6) |
 | `void flatten_()` (`:1430`) | `flatten_()` (`:191`) | identical | `void` C++ method → Python `None`; no self-return possible (T-S7) |
 

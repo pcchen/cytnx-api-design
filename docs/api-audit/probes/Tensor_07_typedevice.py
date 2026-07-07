@@ -124,13 +124,13 @@ report("`to_(arg0=...)` RAISES TypeError -- confirming the real keyword is "
        raised)
 
 # =========================================================================
-# T-T6: the raw plumbing shims `astype_different_dtype` / `to_different_device`
+# T-T2: the raw plumbing shims `astype_different_dtype` / `to_different_device`
 # LEAK into public dir(Tensor); each HARD-ASSERTS the argument differs (raises
 # on a no-op -- they exist only so the conti.py wrapper handles the no-op) and
 # does the real conversion on a genuine change. Cross-ref UniTensor UT-T2.
 # =========================================================================
 report("the raw plumbing bindings `astype_different_dtype` / `to_different_device` "
-       "both LEAK into public dir(Tensor) (T-T6; xref UT-T2)",
+       "both LEAK into public dir(Tensor) (T-T2; xref UT-T2)",
        "astype_different_dtype" in dir(Tensor)
        and "to_different_device" in dir(Tensor))
 
@@ -147,10 +147,10 @@ except RuntimeError:
     raised_d = True
 report("`astype_different_dtype(same dtype)` / `to_different_device(same device)` "
        "each RAISE RuntimeError on a no-op -- the hard assert that forces the "
-       "conti.py wrapper to intercept same-dtype/same-device calls (T-T6)",
+       "conti.py wrapper to intercept same-dtype/same-device calls (T-T2)",
        raised_a and raised_d)
 report("`astype_different_dtype(ComplexDouble)` does the REAL conversion (the "
-       "path `astype` forwards to after its short-circuit) (T-T6)",
+       "path `astype` forwards to after its short-circuit) (T-T2)",
        t.astype_different_dtype(Type.ComplexDouble).dtype() == Type.ComplexDouble)
 
 print("Tensor 07 probe ok")
